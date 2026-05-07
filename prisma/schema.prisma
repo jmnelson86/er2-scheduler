@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id                String   @id @default(cuid())
+  name              String
+  username          String   @unique
+  password          String
+  role              String   @default("PHYSICIAN")   // "ADMIN" | "PHYSICIAN"
+  isPRN             Boolean  @default(false)
+  prefersTwelveHour Boolean  @default(false)
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+
+  preferences  PhysicianPreference[]
+  blockedDates BlockedDate[]
+  assignments  ShiftAssignment[]
+}
+
+model SchedulePeriod {
+  id          String   @id @default(cuid())
+  month       Int
+  year        Int
+  status      String   @default("DRAFT")  // DRAFT | OPEN | GENERATING | PUBLISHED
+  maxDayOff   Int?
+  fcfsEnabled Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  preferences PhysicianPreference[]
+  assignments ShiftAssignment[]
+
+  @@unique([month, year])
+}
+
+model PhysicianPreference {
+  id           String    @id @default(cuid())
+  userId       String
+  periodId     String
+  targetShifts Int       @default(15)
+  notes        String?
+  submittedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user   User           @relation(fields: [userId], references: [id])
+  period SchedulePeriod @relation(fields: [periodId], references: [id])
+
+  @@unique([userId, periodId])
+}
+
+model BlockedDate {
+  id        String   @id @default(cuid())
+  userId    String
+  date      String   // "YYYY-MM-DD"
+  type      String   @default("VACATION")   // VACATION | PERSONAL | OTHER
+  note      String?
+  status    String   @default("CONFIRMED")  // CONFIRMED | WAITLISTED
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model ShiftAssignment {
+  id           String   @id @default(cuid())
+  periodId     String
+  userId       String?
+  date         String   // "YYYY-MM-DD" (shift start date)
+  shiftType    String   // "24H" | "DAY12" | "NIGHT12"
+  isLocked     Boolean  @default(false)
+  isConflict   Boolean  @default(false)
+  conflictNote String?
+  createdAt    DateTime @default(now())
+
+  period SchedulePeriod @relation(fields: [periodId], references: [id])
+  user   User?          @relation(fields: [userId], references: [id])
+}
