@@ -50,15 +50,17 @@ export default function NavBar() {
           <div className="flex items-center gap-1">
             {isAdmin ? (
               <>
-                <Link href="/admin"            className={linkClass("/admin")}>Overview</Link>
-                <Link href="/admin/physicians" className={linkClass("/admin/physicians")}>Physicians</Link>
-                <Link href="/admin/schedule"   className={linkClass("/admin/schedule")}>Schedule</Link>
+                <Link href="/admin"                className={linkClass("/admin")}>Overview</Link>
+                <Link href="/admin/physicians"     className={linkClass("/admin/physicians")}>Physicians</Link>
+                <Link href="/admin/schedule"       className={linkClass("/admin/schedule")}>Schedule</Link>
+                <Link href="/admin/shift-offers"   className={linkClass("/admin/shift-offers")}>Shift Offers</Link>
               </>
             ) : (
               <>
-                <Link href="/dashboard"   className={linkClass("/dashboard")}>Dashboard</Link>
-                <Link href="/preferences" className={linkClass("/preferences")}>Preferences</Link>
-                <Link href="/schedule"    className={linkClass("/schedule")}>My Schedule</Link>
+                <Link href="/dashboard"     className={linkClass("/dashboard")}>Dashboard</Link>
+                <Link href="/preferences"   className={linkClass("/preferences")}>Preferences</Link>
+                <Link href="/schedule"      className={linkClass("/schedule")}>My Schedule</Link>
+                <Link href="/shift-offers"  className={linkClass("/shift-offers")}>Shift Offers</Link>
               </>
             )}
           </div>

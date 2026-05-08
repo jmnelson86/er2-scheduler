@@ -17,9 +17,12 @@ model User {
   isActive          Boolean  @default(true)
   createdAt         DateTime @default(now())
 
-  preferences  PhysicianPreference[]
-  blockedDates BlockedDate[]
-  assignments  ShiftAssignment[]
+  preferences      PhysicianPreference[]
+  blockedDates     BlockedDate[]
+  assignments      ShiftAssignment[]
+  offeredShifts    ShiftOffer[] @relation("OfferedShifts")
+  targetedTrades   ShiftOffer[] @relation("TargetedTrades")
+  pickupRequests   ShiftOffer[] @relation("PickupRequests")
 }
 
 model SchedulePeriod {
@@ -76,6 +79,33 @@ model ShiftAssignment {
   conflictNote String?
   createdAt    DateTime @default(now())
 
-  period SchedulePeriod @relation(fields: [periodId], references: [id])
-  user   User?          @relation(fields: [userId], references: [id])
+  period           SchedulePeriod @relation(fields: [periodId], references: [id])
+  user             User?          @relation(fields: [userId], references: [id])
+  offer            ShiftOffer?    @relation("OfferedAssignment")
+  tradeTargetOffer ShiftOffer?    @relation("TradeTargetAssignment")
+}
+
+model ShiftOffer {
+  id                 String           @id @default(cuid())
+  type               String           // "PICKUP" | "TRADE"
+  status             String           @default("PENDING") // "PENDING" | "ACCEPTED" | "CANCELLED" | "COMPLETED" | "DENIED"
+  offeringUserId     String
+  offeringUser       User             @relation("OfferedShifts", fields: [offeringUserId], references: [id])
+  assignmentId       String           @unique
+  assignment         ShiftAssignment  @relation("OfferedAssignment", fields: [assignmentId], references: [id])
+  targetUserId       String?
+  targetUser         User?            @relation("TargetedTrades", fields: [targetUserId], references: [id])
+  targetAssignmentId String?          @unique
+  targetAssignment   ShiftAssignment? @relation("TradeTargetAssignment", fields: [targetAssignmentId], references: [id])
+  requestedByUserId  String?
+  requestedByUser    User?            @relation("PickupRequests", fields: [requestedByUserId], references: [id])
+  note               String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+}
+
+model AdminSetting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
 }

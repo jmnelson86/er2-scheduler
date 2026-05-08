@@ -23,7 +23,7 @@ export default async function AdminPage() {
   if (!session) redirect("/login")
   if (session.user.role !== "ADMIN") redirect("/dashboard")
 
-  const [periods, physicians, totalFT] = await Promise.all([
+  const [periods, physicians, totalFT, pendingOffers] = await Promise.all([
     prisma.schedulePeriod.findMany({
       orderBy: [{ year: "desc" }, { month: "desc" }],
       include: { _count: { select: { assignments: true, preferences: true } } },
@@ -33,6 +33,7 @@ export default async function AdminPage() {
       orderBy: [{ isPRN: "asc" }, { name: "asc" }],
     }),
     prisma.user.count({ where: { role: "PHYSICIAN", isActive: true, isPRN: false } }),
+    prisma.shiftOffer.count({ where: { status: "ACCEPTED" } }),
   ])
 
   // Submission counts for open periods
@@ -71,6 +72,26 @@ export default async function AdminPage() {
             <p className="text-xs text-slate-500 mt-1">Total Periods</p>
           </div>
         </div>
+
+        {/* Pending shift offers banner */}
+        {pendingOffers > 0 && (
+          <div className="flex items-center justify-between gap-4 px-5 py-4 rounded-xl bg-blue-50 ring-2 ring-blue-200 flex-wrap">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">🔄</span>
+              <div>
+                <p className="font-semibold text-blue-800 text-sm">
+                  {pendingOffers} shift offer{pendingOffers !== 1 ? "s" : ""} awaiting approval
+                </p>
+                <p className="text-xs text-blue-700 mt-0.5">
+                  Physicians are waiting for their shift trades or pickups to be approved.
+                </p>
+              </div>
+            </div>
+            <Link href="/admin/shift-offers" className="btn-primary text-sm py-2 px-4 shrink-0">
+              Review →
+            </Link>
+          </div>
+        )}
 
         {/* All-submitted banners */}
         {openPeriods
