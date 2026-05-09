@@ -20,16 +20,28 @@ export async function POST(req: NextRequest) {
     where:   { role: "PHYSICIAN", isActive: true },
     include: {
       preferences:    { where: { periodId } },
-      blockedDates:   {
-        where: {
-          date: { startsWith: `${period.year}-${String(period.month).padStart(2, "0")}` },
-          status: "CONFIRMED",
-        },
-      },
       preferredDates: { where: { periodId } },
     },
     orderBy: [{ isPRN: "asc" }, { name: "asc" }],
   })
+
+  // Load all blocked dates for the period and split by hardness
+  const blockedDates = await prisma.blockedDate.findMany({
+    where: {
+      date:   { startsWith: `${period.year}-${String(period.month).padStart(2, "0")}` },
+      status: "CONFIRMED",
+    },
+  })
+
+  const hardBlocked: Record<string, string[]> = {}
+  const softBlocked: Record<string, string[]> = {}
+  for (const b of blockedDates) {
+    if (b.hardness === "PREFERRED") {
+      ;(softBlocked[b.userId] ??= []).push(b.date)
+    } else {
+      ;(hardBlocked[b.userId] ??= []).push(b.date)
+    }
+  }
 
   // Fetch locked assignments to preserve them
   const lockedAssignments = await prisma.shiftAssignment.findMany({
@@ -47,7 +59,8 @@ export async function POST(req: NextRequest) {
     name:             p.name,
     isPRN:            p.isPRN,
     prefersTwelveHour: p.prefersTwelveHour,
-    blockedDates:     p.blockedDates.map((b) => b.date),
+    hardBlockedDates: hardBlocked[p.id] ?? [],
+    softBlockedDates: softBlocked[p.id] ?? [],
     preferredDates:   p.preferredDates.map((d) => d.date),
     targetShifts:     p.preferences[0]?.targetShifts ?? (p.isPRN ? 8 : 15),
   }))

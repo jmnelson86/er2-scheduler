@@ -6,6 +6,7 @@ import { getDaysInMonth } from "date-fns"
 interface BlockedDate {
   date: string
   type: string
+  hardness: "REQUIRED" | "PREFERRED"
 }
 
 interface Props {
@@ -30,7 +31,8 @@ function typeStyle(type: string) {
 }
 
 export default function CalendarPicker({ year, month, blocked, onChange, waitlisted = [] }: Props) {
-  const [activeType, setActiveType] = useState("VACATION")
+  const [activeType, setActiveType]       = useState("VACATION")
+  const [hardness, setHardness]           = useState<"REQUIRED" | "PREFERRED">("REQUIRED")
 
   const daysInMonth = getDaysInMonth(new Date(year, month - 1))
   const firstDow    = new Date(year, month - 1, 1).getDay()
@@ -42,14 +44,16 @@ export default function CalendarPicker({ year, month, blocked, onChange, waitlis
 
   function toggleDate(dateStr: string) {
     if (blockedByDate[dateStr]) {
-      // If already blocked with a different type, change type; if same type, remove
-      if (blockedByDate[dateStr].type === activeType) {
+      const existing = blockedByDate[dateStr]
+      // Same type AND same hardness → remove
+      if (existing.type === activeType && existing.hardness === hardness) {
         onChange(blocked.filter((b) => b.date !== dateStr))
       } else {
-        onChange(blocked.map((b) => b.date === dateStr ? { ...b, type: activeType } : b))
+        // Different type OR different hardness → update
+        onChange(blocked.map((b) => b.date === dateStr ? { ...b, type: activeType, hardness } : b))
       }
     } else {
-      onChange([...blocked, { date: dateStr, type: activeType }])
+      onChange([...blocked, { date: dateStr, type: activeType, hardness }])
     }
   }
 
@@ -58,8 +62,37 @@ export default function CalendarPicker({ year, month, blocked, onChange, waitlis
     days.push(`${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`)
   }
 
+  const requiredCount  = blocked.filter((b) => b.hardness === "REQUIRED").length
+  const preferredCount = blocked.filter((b) => b.hardness === "PREFERRED").length
+
   return (
     <div className="space-y-3">
+      {/* Hardness toggle */}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setHardness("REQUIRED")}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold ring-1 transition ${
+            hardness === "REQUIRED"
+              ? "bg-red-100 text-red-700 ring-red-300 shadow-sm"
+              : "bg-white text-slate-500 ring-slate-200 hover:ring-slate-300"
+          }`}
+        >
+          🚫 Unavailable (Required)
+        </button>
+        <button
+          type="button"
+          onClick={() => setHardness("PREFERRED")}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold ring-1 transition ${
+            hardness === "PREFERRED"
+              ? "bg-amber-100 text-amber-700 ring-amber-300 shadow-sm"
+              : "bg-white text-slate-500 ring-slate-200 hover:ring-slate-300"
+          }`}
+        >
+          💛 Preferred Off
+        </button>
+      </div>
+
       {/* Type selector */}
       <div className="flex gap-2 flex-wrap">
         {TYPE_OPTS.map((t) => (
@@ -93,13 +126,14 @@ export default function CalendarPicker({ year, month, blocked, onChange, waitlis
           ))}
 
           {days.map((dateStr) => {
-            const entry   = blockedByDate[dateStr]
+            const entry     = blockedByDate[dateStr]
             const isBlocked = !!entry
-            const style   = entry ? typeStyle(entry.type) : null
-            const isWait  = waitSet.has(dateStr)
-            const dow     = new Date(dateStr + "T12:00:00").getDay()
-            const weekend = dow === 0 || dow === 6
-            const dayNum  = parseInt(dateStr.split("-")[2])
+            const style     = entry ? typeStyle(entry.type) : null
+            const isPreferred = entry?.hardness === "PREFERRED"
+            const isWait    = waitSet.has(dateStr)
+            const dow       = new Date(dateStr + "T12:00:00").getDay()
+            const weekend   = dow === 0 || dow === 6
+            const dayNum    = parseInt(dateStr.split("-")[2])
 
             return (
               <button
@@ -119,7 +153,9 @@ export default function CalendarPicker({ year, month, blocked, onChange, waitlis
                 <span className={`
                   w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold
                   ${isBlocked
-                    ? `${style!.bg} ${style!.text}`
+                    ? isPreferred
+                      ? `bg-amber-50 text-amber-800 ring-2 ring-dashed ring-amber-300`
+                      : `${style!.bg} ${style!.text}`
                     : weekend ? "text-slate-400" : "text-slate-700"}
                   ${isWait ? "ring-2 ring-amber-400" : ""}
                 `}>
@@ -142,6 +178,10 @@ export default function CalendarPicker({ year, month, blocked, onChange, waitlis
             {t.label}
           </span>
         ))}
+        <span className="flex items-center gap-1.5 text-amber-700">
+          <span className="w-3 h-3 rounded-full bg-amber-100 ring-2 ring-dashed ring-amber-300" />
+          Preferred off
+        </span>
         {waitlisted.length > 0 && (
           <span className="flex items-center gap-1.5 text-amber-600">
             <span className="w-3 h-3 rounded-full bg-amber-400" />
@@ -152,8 +192,10 @@ export default function CalendarPicker({ year, month, blocked, onChange, waitlis
 
       {blocked.length > 0 && (
         <p className="text-xs text-slate-500">
-          {blocked.length} day{blocked.length !== 1 ? "s" : ""} blocked
-          {" "}— tap a blocked day again to change type, or tap with same type selected to remove
+          {requiredCount > 0 && `${requiredCount} required off`}
+          {requiredCount > 0 && preferredCount > 0 && " · "}
+          {preferredCount > 0 && `${preferredCount} preferred off`}
+          {" "}— tap a blocked day again to change type or hardness, or tap with same settings to remove
         </p>
       )}
     </div>

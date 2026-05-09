@@ -63,6 +63,7 @@ model BlockedDate {
   userId    String
   date      String   // "YYYY-MM-DD"
   type      String   @default("VACATION")   // VACATION | PERSONAL | OTHER
+  hardness  String   @default("REQUIRED")   // "REQUIRED" | "PREFERRED"
   note      String?
   status    String   @default("CONFIRMED")  // CONFIRMED | WAITLISTED
   createdAt DateTime @default(now())

@@ -25,7 +25,8 @@ export interface PhysicianData {
   name:             string
   isPRN:            boolean
   prefersTwelveHour: boolean
-  blockedDates:     string[]  // "YYYY-MM-DD"
+  hardBlockedDates: string[]  // REQUIRED — never assign
+  softBlockedDates: string[]  // PREFERRED — large penalty, last resort
   preferredDates:   string[]  // "YYYY-MM-DD"
   targetShifts:     number
 }
@@ -76,8 +77,8 @@ export function buildSlots(
 
   for (let d = 0; d < days; d++) {
     const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(d + 1).padStart(2, "0")}`
-    // Heuristic: check if any active (non-blocked) physician prefers 12h
-    const availPhy = physicians.filter((p) => !p.blockedDates.includes(dateStr))
+    // Heuristic: check if any active (non-hard-blocked) physician prefers 12h
+    const availPhy = physicians.filter((p) => !p.hardBlockedDates.includes(dateStr))
     const has12hPref = availPhy.some((p) => p.prefersTwelveHour)
 
     if (has12hPref && availPhy.length >= 2) {
@@ -115,10 +116,9 @@ export function runScheduler(
     const d = dayIndex(slot.date)
     const { start, end } = slotMinutes(d, slot.shiftType)
 
-    // Candidates: not blocked, respects rest gap
+    // Candidates: not HARD blocked, respects rest gap
     const candidates = physicians.filter((p) => {
-      if (p.blockedDates.includes(slot.date)) return false
-      // Also block the day before for DAY12 and 24H (they overlap with NIGHT12 start)
+      if (p.hardBlockedDates.includes(slot.date)) return false  // Hard block — excluded
       const canStart = lastEnd[p.id] + MIN_REST <= start
       return canStart
     })
@@ -130,7 +130,7 @@ export function runScheduler(
         shiftType:   slot.shiftType,
         userId:      null,
         isConflict:  true,
-        conflictNote: "No available physician (all blocked or insufficient rest)",
+        conflictNote: "No available physician — all have required days off on this date",
       })
       continue
     }
@@ -150,6 +150,9 @@ export function runScheduler(
       // PRN penalty
       if (p.isPRN) score -= 40
 
+      // Soft block penalty — large, last resort only
+      if (p.softBlockedDates.includes(slot.date)) score -= 80
+
       // Preferred date bonus
       if (p.preferredDates.includes(slot.date)) score += 20
 
@@ -165,6 +168,7 @@ export function runScheduler(
 
     scored.sort((a, b) => b.score - a.score)
     const winner = scored[0].p
+    const winnerHasSoftBlock = winner.softBlockedDates.includes(slot.date)
 
     lastEnd[winner.id] = end
     shiftCount[winner.id]++
@@ -173,8 +177,10 @@ export function runScheduler(
       date:        slot.date,
       shiftType:   slot.shiftType,
       userId:      winner.id,
-      isConflict:  false,
-      conflictNote: "",
+      isConflict:  winnerHasSoftBlock,
+      conflictNote: winnerHasSoftBlock
+        ? "Physician assigned on a preferred day off — no other physicians available"
+        : "",
     })
   }
 

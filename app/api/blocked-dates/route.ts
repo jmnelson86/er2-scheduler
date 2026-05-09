@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
   const waitlistedDates: string[] = []
 
   const toInsert = await Promise.all(
-    (dates as { date: string; type: string; note?: string }[]).map(async (d) => {
+    (dates as { date: string; type: string; hardness?: string; note?: string }[]).map(async (d) => {
       let status = "CONFIRMED"
 
       if (period.fcfsEnabled && period.maxDayOff != null) {
@@ -71,10 +71,11 @@ export async function POST(req: NextRequest) {
       }
 
       return {
-        userId: session.user.id,
-        date:   d.date,
-        type:   d.type,
-        note:   d.note ?? null,
+        userId:   session.user.id,
+        date:     d.date,
+        type:     d.type,
+        hardness: (d.hardness ?? "REQUIRED") as string,
+        note:     d.note ?? null,
         status,
       }
     })

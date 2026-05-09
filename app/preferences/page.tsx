@@ -13,7 +13,7 @@ interface Period {
 }
 
 interface BlockedDate {
-  date: string; type: string
+  date: string; type: string; hardness: "REQUIRED" | "PREFERRED"
 }
 
 interface PreferredDate {
@@ -82,7 +82,7 @@ function PreferencesInner() {
       setTargetShifts(prefData.preference?.targetShifts ?? 15)
       setNotes(prefData.preference?.notes ?? "")
       setSubmitted(!!prefData.preference?.submittedAt)
-      setBlocked((blockedData.dates ?? []).map((d: any) => ({ date: d.date, type: d.type })))
+      setBlocked((blockedData.dates ?? []).map((d: any) => ({ date: d.date, type: d.type, hardness: (d.hardness ?? "REQUIRED") as "REQUIRED" | "PREFERRED" })))
       setWaitlisted((blockedData.dates ?? []).filter((d: any) => d.status === "WAITLISTED").map((d: any) => d.date))
       setPreferred((preferredData.dates ?? []).map((d: any) => ({ date: d.date, shiftType: d.shiftType ?? null })))
       setLoadingPref(false)

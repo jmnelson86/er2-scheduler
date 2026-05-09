@@ -16,6 +16,10 @@ const BLOCK_COLOR: Record<string, string> = {
   PERSONAL: "bg-red-100 text-red-700",
   OTHER:    "bg-purple-100 text-purple-700",
 }
+const HARDNESS_ICON: Record<string, string> = {
+  REQUIRED:  "🚫",
+  PREFERRED: "💛",
+}
 
 export default async function PhysiciansPage({
   searchParams,
@@ -188,6 +192,9 @@ export default async function PhysiciansPage({
                   <span className={`w-2 h-2 rounded-full ${s.dot}`} /> {s.label}
                 </span>
               ))}
+              <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-slate-50 text-slate-500 ring-1 ring-slate-200">
+                🚫 Required off &nbsp;·&nbsp; 💛 Preferred off
+              </span>
             </div>
 
             {/* Physician cards */}
@@ -262,8 +269,13 @@ export default async function PhysiciansPage({
                           {blocked.map((b: any) => (
                             <span
                               key={b.date}
-                              className={`text-xs px-2 py-0.5 rounded-full ${BLOCK_COLOR[b.type]}`}
+                              className={`text-xs px-2 py-0.5 rounded-full ${
+                                b.hardness === "PREFERRED"
+                                  ? "bg-amber-50 text-amber-800 ring-1 ring-dashed ring-amber-300"
+                                  : BLOCK_COLOR[b.type]
+                              }`}
                             >
+                              {HARDNESS_ICON[b.hardness ?? "REQUIRED"]}{" "}
                               {format(new Date(b.date + "T12:00:00"), "MMM d")}
                               {b.status === "WAITLISTED" && " ⏳"}
                             </span>
