@@ -57,6 +57,13 @@ export default async function AdminPage() {
           <p className="text-slate-500 mt-2 text-sm">TotalCare Denton · Manage schedule periods and physicians.</p>
         </div>
 
+        {/* Quick links */}
+        <div className="flex flex-wrap gap-3">
+          <Link href="/admin/physician-settings" className="btn-secondary text-sm">
+            ⚙️ Physician Shift Settings
+          </Link>
+        </div>
+
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           <div className="card text-center">

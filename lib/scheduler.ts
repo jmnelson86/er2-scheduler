@@ -28,7 +28,11 @@ export interface PhysicianData {
   hardBlockedDates: string[]  // REQUIRED — never assign
   softBlockedDates: string[]  // PREFERRED — large penalty, last resort
   preferredDates:   string[]  // "YYYY-MM-DD"
-  targetShifts:     number
+  targetShifts:      number   // ideal shifts
+  minShifts:         number   // minimum (default: targetShifts - 3, min 1)
+  maxShifts:         number   // maximum (default: targetShifts + 3)
+  adminTargetShifts?: number  // admin override
+  adminHardCap:      boolean  // if true, hard stop at adminTargetShifts
 }
 
 export interface SlotInput {
@@ -116,11 +120,14 @@ export function runScheduler(
     const d = dayIndex(slot.date)
     const { start, end } = slotMinutes(d, slot.shiftType)
 
-    // Candidates: not HARD blocked, respects rest gap
+    // Candidates: not HARD blocked, respects rest gap, not over hard cap
     const candidates = physicians.filter((p) => {
       if (p.hardBlockedDates.includes(slot.date)) return false  // Hard block — excluded
       const canStart = lastEnd[p.id] + MIN_REST <= start
-      return canStart
+      if (!canStart) return false
+      // Hard cap check — exclude if admin hard cap reached
+      if (p.adminHardCap && p.adminTargetShifts != null && shiftCount[p.id] >= p.adminTargetShifts) return false
+      return true
     })
 
     if (candidates.length === 0) {
@@ -139,13 +146,25 @@ export function runScheduler(
     const scored = candidates.map((p) => {
       let score = 0
 
+      // Effective targets
+      const effectiveTarget = p.adminTargetShifts ?? p.targetShifts
+      const effectiveMax = (p.adminHardCap && p.adminTargetShifts != null)
+        ? p.adminTargetShifts
+        : p.maxShifts
+
       // Prefer-12h match
       if (slot.shiftType !== "24H" && p.prefersTwelveHour)  score += 60
       if (slot.shiftType === "24H" && !p.prefersTwelveHour) score += 30
 
-      // Under target shifts — incentivize
-      const remaining = p.targetShifts - shiftCount[p.id]
+      // Under effective target — incentivize
+      const remaining = effectiveTarget - shiftCount[p.id]
       score += Math.max(0, remaining) * 10
+
+      // Penalty for going over effective target
+      if (shiftCount[p.id] >= effectiveTarget) score -= 25
+
+      // Soft cap penalty — strong penalty for exceeding max
+      if (shiftCount[p.id] >= effectiveMax) score -= 60
 
       // PRN penalty
       if (p.isPRN) score -= 40

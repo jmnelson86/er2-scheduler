@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 })
 
   const body = await req.json()
-  const { periodId, targetShifts, notes, submit } = body
+  const { periodId, targetShifts, minShifts, maxShifts, notes, submit } = body
 
   if (!periodId) return Response.json({ error: "periodId required" }, { status: 400 })
 
@@ -37,11 +37,15 @@ export async function POST(req: NextRequest) {
       userId:      session.user.id,
       periodId,
       targetShifts: targetShifts ?? 15,
+      minShifts:    minShifts ?? null,
+      maxShifts:    maxShifts ?? null,
       notes:        notes ?? null,
       submittedAt:  submit ? new Date() : null,
     },
     update: {
       targetShifts: targetShifts ?? 15,
+      minShifts:    minShifts ?? null,
+      maxShifts:    maxShifts ?? null,
       notes:        notes ?? null,
       ...(submit ? { submittedAt: new Date() } : {}),
     },

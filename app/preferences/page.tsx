@@ -35,6 +35,8 @@ function PreferencesInner() {
   const [blocked, setBlocked]           = useState<BlockedDate[]>([])
   const [preferred, setPreferred]       = useState<PreferredDate[]>([])
   const [targetShifts, setTargetShifts] = useState(15)
+  const [minShifts, setMinShifts]       = useState(12)
+  const [maxShifts, setMaxShifts]       = useState(18)
   const [notes, setNotes]               = useState("")
   const [waitlisted, setWaitlisted]     = useState<string[]>([])
   const [saving, setSaving]             = useState(false)
@@ -79,7 +81,10 @@ function PreferencesInner() {
       fetch(`/api/blocked-dates?periodId=${selectedId}`).then((r) => r.json()),
       fetch(`/api/preferred-dates?periodId=${selectedId}`).then((r) => r.json()),
     ]).then(([prefData, blockedData, preferredData]) => {
-      setTargetShifts(prefData.preference?.targetShifts ?? 15)
+      const target = prefData.preference?.targetShifts ?? 15
+      setTargetShifts(target)
+      setMinShifts(prefData.preference?.minShifts ?? Math.max(1, target - 3))
+      setMaxShifts(prefData.preference?.maxShifts ?? target + 3)
       setNotes(prefData.preference?.notes ?? "")
       setSubmitted(!!prefData.preference?.submittedAt)
       setBlocked((blockedData.dates ?? []).map((d: any) => ({ date: d.date, type: d.type, hardness: (d.hardness ?? "REQUIRED") as "REQUIRED" | "PREFERRED" })))
@@ -133,7 +138,7 @@ function PreferencesInner() {
     await fetch("/api/preferences", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ periodId: selectedId, targetShifts, notes }),
+      body:    JSON.stringify({ periodId: selectedId, targetShifts, minShifts, maxShifts, notes }),
     })
     setSaving(false)
     setSaved(true)
@@ -147,7 +152,7 @@ function PreferencesInner() {
     await fetch("/api/preferences", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ periodId: selectedId, targetShifts, notes, submit: true }),
+      body:    JSON.stringify({ periodId: selectedId, targetShifts, minShifts, maxShifts, notes, submit: true }),
     })
     setSubmitting(false)
     setSubmitted(true)
@@ -224,24 +229,51 @@ function PreferencesInner() {
                 </div>
 
                 {/* Target shifts */}
-                <div className="card space-y-3">
-                  <h3 className="font-semibold text-slate-700">Target Shifts</h3>
-                  <div>
-                    <label className="label">Number of shifts requested this month</label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={31}
-                      value={targetShifts}
-                      onChange={(e) => setTargetShifts(Number(e.target.value))}
-                      className="input w-24"
-                    />
-                    <p className="text-xs text-slate-400 mt-1">
-                      {(session.user as any).prefersTwelveHour
-                        ? "Each 12h shift counts as one shift."
-                        : "Each 24h shift counts as one shift."}
-                    </p>
+                <div className="card space-y-4">
+                  <h3 className="font-semibold text-slate-700">Shift Count Request</h3>
+                  <p className="text-xs text-slate-500">
+                    The scheduler will try to hit your ideal, staying between your min and max.
+                  </p>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <label className="label">Minimum shifts</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={31}
+                        value={minShifts}
+                        onChange={(e) => setMinShifts(Number(e.target.value))}
+                        className="input w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="label">Ideal shifts</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={31}
+                        value={targetShifts}
+                        onChange={(e) => setTargetShifts(Number(e.target.value))}
+                        className="input w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="label">Maximum shifts</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={31}
+                        value={maxShifts}
+                        onChange={(e) => setMaxShifts(Number(e.target.value))}
+                        className="input w-full"
+                      />
+                    </div>
                   </div>
+                  <p className="text-xs text-slate-400">
+                    {(session.user as any).prefersTwelveHour
+                      ? "Each 12h shift counts as one shift."
+                      : "Each 24h shift counts as one shift."}
+                  </p>
                 </div>
 
                 {/* Blocked dates */}

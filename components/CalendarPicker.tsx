@@ -89,7 +89,7 @@ export default function CalendarPicker({ year, month, blocked, onChange, waitlis
               : "bg-white text-slate-500 ring-slate-200 hover:ring-slate-300"
           }`}
         >
-          💛 Preferred Off
+          ⚠️ Preferred Off
         </button>
       </div>
 

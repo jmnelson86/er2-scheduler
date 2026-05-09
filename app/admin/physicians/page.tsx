@@ -18,7 +18,7 @@ const BLOCK_COLOR: Record<string, string> = {
 }
 const HARDNESS_ICON: Record<string, string> = {
   REQUIRED:  "🚫",
-  PREFERRED: "💛",
+  PREFERRED: "⚠️",
 }
 
 export default async function PhysiciansPage({
@@ -193,7 +193,7 @@ export default async function PhysiciansPage({
                 </span>
               ))}
               <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-slate-50 text-slate-500 ring-1 ring-slate-200">
-                🚫 Required off &nbsp;·&nbsp; 💛 Preferred off
+                🚫 Required off &nbsp;·&nbsp; ⚠️ Preferred off
               </span>
             </div>
 

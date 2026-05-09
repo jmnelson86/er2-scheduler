@@ -15,6 +15,8 @@ model User {
   isPRN             Boolean  @default(false)
   prefersTwelveHour Boolean  @default(false)
   isActive          Boolean  @default(true)
+  adminTargetShifts Int?     // admin-set shift target (overrides physician's if set)
+  adminHardCap      Boolean  @default(false)  // if true, scheduler never exceeds adminTargetShifts
   createdAt         DateTime @default(now())
 
   preferences      PhysicianPreference[]
@@ -47,6 +49,8 @@ model PhysicianPreference {
   userId       String
   periodId     String
   targetShifts Int       @default(15)
+  minShifts    Int?      // minimum they'll accept
+  maxShifts    Int?      // maximum they'll accept
   notes        String?
   submittedAt  DateTime?
   createdAt    DateTime  @default(now())

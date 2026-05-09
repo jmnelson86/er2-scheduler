@@ -54,16 +54,24 @@ export async function POST(req: NextRequest) {
   })
 
   // Build physician data for scheduler
-  const physicianData = physicians.map((p) => ({
-    id:               p.id,
-    name:             p.name,
-    isPRN:            p.isPRN,
-    prefersTwelveHour: p.prefersTwelveHour,
-    hardBlockedDates: hardBlocked[p.id] ?? [],
-    softBlockedDates: softBlocked[p.id] ?? [],
-    preferredDates:   p.preferredDates.map((d) => d.date),
-    targetShifts:     p.preferences[0]?.targetShifts ?? (p.isPRN ? 8 : 15),
-  }))
+  const physicianData = physicians.map((p) => {
+    const pref   = p.preferences[0]
+    const target = pref?.targetShifts ?? (p.isPRN ? 8 : 15)
+    return {
+      id:               p.id,
+      name:             p.name,
+      isPRN:            p.isPRN,
+      prefersTwelveHour: p.prefersTwelveHour,
+      hardBlockedDates: hardBlocked[p.id] ?? [],
+      softBlockedDates: softBlocked[p.id] ?? [],
+      preferredDates:   p.preferredDates.map((d) => d.date),
+      targetShifts:     target,
+      minShifts:        pref?.minShifts ?? Math.max(1, target - 3),
+      maxShifts:        pref?.maxShifts ?? target + 3,
+      adminTargetShifts: (p as any).adminTargetShifts ?? undefined,
+      adminHardCap:     (p as any).adminHardCap ?? false,
+    }
+  })
 
   // Run scheduler (skipping dates already covered by locked assignments)
   const lockedDatesSet = new Set(lockedAssignments.map((a) => `${a.date}::${a.shiftType}`))
