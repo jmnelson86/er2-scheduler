@@ -55,6 +55,12 @@ export default async function PhysiciansPage({
             orderBy: { date: "asc" },
           }
         : false,
+      preferredDates: period
+        ? {
+            where: { periodId: period.id },
+            orderBy: { date: "asc" },
+          }
+        : false,
     },
   })
 
@@ -187,8 +193,9 @@ export default async function PhysiciansPage({
             {/* Physician cards */}
             <div className="space-y-4">
               {physicians.map((doc) => {
-                const pref    = (doc.preferences as any)?.[0] ?? null
-                const blocked = (doc.blockedDates as any) ?? []
+                const pref      = (doc.preferences as any)?.[0] ?? null
+                const blocked   = (doc.blockedDates as any) ?? []
+                const preferred = (doc.preferredDates as any) ?? []
 
                 const submissionStatus = pref?.submittedAt ? "submitted" : pref ? "draft" : "none"
                 const statusStyles: Record<string, string> = {
@@ -229,10 +236,15 @@ export default async function PhysiciansPage({
                           </span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 flex-wrap">
                         {pref && (
                           <span className="text-sm font-semibold" style={{ color: "#0d2580" }}>
                             {pref.targetShifts} shifts requested
+                          </span>
+                        )}
+                        {preferred.length > 0 && (
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700 ring-1 ring-green-200">
+                            🟢 {preferred.length} preferred
                           </span>
                         )}
                         <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${statusStyles[submissionStatus]}`}>
@@ -260,13 +272,38 @@ export default async function PhysiciansPage({
                       </div>
                     )}
 
+                    {preferred.length > 0 && (
+                      <div>
+                        <p className="text-xs font-medium text-slate-500 mb-2">
+                          Preferred dates ({preferred.length})
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {preferred.map((p: any) => (
+                            <span
+                              key={p.date}
+                              className={`text-xs px-2 py-0.5 rounded-full ${
+                                p.shiftType === "DAY12"
+                                  ? "bg-sky-100 text-sky-700"
+                                  : p.shiftType === "NIGHT12"
+                                  ? "bg-indigo-100 text-indigo-700"
+                                  : "bg-green-100 text-green-700"
+                              }`}
+                            >
+                              {format(new Date(p.date + "T12:00:00"), "MMM d")}
+                              {p.shiftType ? ` (${p.shiftType})` : ""}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {pref?.notes && (
                       <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 italic">
                         &quot;{pref.notes}&quot;
                       </div>
                     )}
 
-                    {!pref && blocked.length === 0 && (
+                    {!pref && blocked.length === 0 && preferred.length === 0 && (
                       <p className="text-sm text-slate-400 italic">No preferences entered yet.</p>
                     )}
                   </div>

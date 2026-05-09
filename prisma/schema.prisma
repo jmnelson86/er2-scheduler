@@ -19,6 +19,7 @@ model User {
 
   preferences      PhysicianPreference[]
   blockedDates     BlockedDate[]
+  preferredDates   PreferredDate[]
   assignments      ShiftAssignment[]
   offeredShifts    ShiftOffer[] @relation("OfferedShifts")
   targetedTrades   ShiftOffer[] @relation("TargetedTrades")
@@ -34,8 +35,9 @@ model SchedulePeriod {
   fcfsEnabled Boolean  @default(false)
   createdAt   DateTime @default(now())
 
-  preferences PhysicianPreference[]
-  assignments ShiftAssignment[]
+  preferences    PhysicianPreference[]
+  assignments    ShiftAssignment[]
+  preferredDates PreferredDate[]
 
   @@unique([month, year])
 }
@@ -108,4 +110,18 @@ model AdminSetting {
   id    String @id @default(cuid())
   key   String @unique
   value String
+}
+
+model PreferredDate {
+  id        String   @id @default(cuid())
+  userId    String
+  periodId  String
+  date      String   // "YYYY-MM-DD"
+  shiftType String?  // "24H" | "DAY12" | "NIGHT12" | null (= any)
+  createdAt DateTime @default(now())
+
+  user   User           @relation(fields: [userId], references: [id])
+  period SchedulePeriod @relation(fields: [periodId], references: [id])
+
+  @@unique([userId, periodId, date])
 }

@@ -15,17 +15,18 @@ export async function POST(req: NextRequest) {
   const period = await prisma.schedulePeriod.findUnique({ where: { id: periodId } })
   if (!period) return Response.json({ error: "Period not found" }, { status: 404 })
 
-  // Load physicians with their preferences and blocked dates
+  // Load physicians with their preferences, blocked dates, and preferred dates
   const physicians = await prisma.user.findMany({
     where:   { role: "PHYSICIAN", isActive: true },
     include: {
-      preferences:  { where: { periodId } },
-      blockedDates: {
+      preferences:    { where: { periodId } },
+      blockedDates:   {
         where: {
           date: { startsWith: `${period.year}-${String(period.month).padStart(2, "0")}` },
           status: "CONFIRMED",
         },
       },
+      preferredDates: { where: { periodId } },
     },
     orderBy: [{ isPRN: "asc" }, { name: "asc" }],
   })
@@ -47,6 +48,7 @@ export async function POST(req: NextRequest) {
     isPRN:            p.isPRN,
     prefersTwelveHour: p.prefersTwelveHour,
     blockedDates:     p.blockedDates.map((b) => b.date),
+    preferredDates:   p.preferredDates.map((d) => d.date),
     targetShifts:     p.preferences[0]?.targetShifts ?? (p.isPRN ? 8 : 15),
   }))
 

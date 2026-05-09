@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react"
 import { useRouter, useSearchParams } from "next/navigation"
 import NavBar from "@/components/NavBar"
 import CalendarPicker from "@/components/CalendarPicker"
+import PreferredCalendar from "@/components/PreferredCalendar"
 import { Suspense } from "react"
 
 interface Period {
@@ -13,6 +14,10 @@ interface Period {
 
 interface BlockedDate {
   date: string; type: string
+}
+
+interface PreferredDate {
+  date: string; shiftType: string | null
 }
 
 const MONTH_NAMES = [
@@ -27,16 +32,18 @@ function PreferencesInner() {
 
   const [periods, setPeriods]         = useState<Period[]>([])
   const [selectedId, setSelectedId]   = useState<string | null>(null)
-  const [blocked, setBlocked]         = useState<BlockedDate[]>([])
+  const [blocked, setBlocked]           = useState<BlockedDate[]>([])
+  const [preferred, setPreferred]       = useState<PreferredDate[]>([])
   const [targetShifts, setTargetShifts] = useState(15)
-  const [notes, setNotes]             = useState("")
-  const [waitlisted, setWaitlisted]   = useState<string[]>([])
-  const [saving, setSaving]           = useState(false)
-  const [saved, setSaved]             = useState(false)
-  const [submitting, setSubmitting]   = useState(false)
-  const [submitted, setSubmitted]     = useState(false)
-  const [loadingPref, setLoadingPref] = useState(false)
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [notes, setNotes]               = useState("")
+  const [waitlisted, setWaitlisted]     = useState<string[]>([])
+  const [saving, setSaving]             = useState(false)
+  const [saved, setSaved]               = useState(false)
+  const [submitting, setSubmitting]     = useState(false)
+  const [submitted, setSubmitted]       = useState(false)
+  const [loadingPref, setLoadingPref]   = useState(false)
+  const debounceRef      = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const prefDebounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const selectedPeriod = periods.find((p) => p.id === selectedId)
 
@@ -70,12 +77,14 @@ function PreferencesInner() {
     Promise.all([
       fetch(`/api/preferences?periodId=${selectedId}`).then((r) => r.json()),
       fetch(`/api/blocked-dates?periodId=${selectedId}`).then((r) => r.json()),
-    ]).then(([prefData, blockedData]) => {
+      fetch(`/api/preferred-dates?periodId=${selectedId}`).then((r) => r.json()),
+    ]).then(([prefData, blockedData, preferredData]) => {
       setTargetShifts(prefData.preference?.targetShifts ?? 15)
       setNotes(prefData.preference?.notes ?? "")
       setSubmitted(!!prefData.preference?.submittedAt)
       setBlocked((blockedData.dates ?? []).map((d: any) => ({ date: d.date, type: d.type })))
       setWaitlisted((blockedData.dates ?? []).filter((d: any) => d.status === "WAITLISTED").map((d: any) => d.date))
+      setPreferred((preferredData.dates ?? []).map((d: any) => ({ date: d.date, shiftType: d.shiftType ?? null })))
       setLoadingPref(false)
     })
   }, [selectedId])
@@ -101,6 +110,21 @@ function PreferencesInner() {
     setBlocked(dates)
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => saveBlocked(dates), 800)
+  }
+
+  const savePreferred = useCallback(async (dates: PreferredDate[]) => {
+    if (!selectedId) return
+    await fetch("/api/preferred-dates", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ periodId: selectedId, dates }),
+    })
+  }, [selectedId])
+
+  function handlePreferredChange(dates: PreferredDate[]) {
+    setPreferred(dates)
+    if (prefDebounceRef.current) clearTimeout(prefDebounceRef.current)
+    prefDebounceRef.current = setTimeout(() => savePreferred(dates), 800)
   }
 
   async function handleSaveDraft() {
@@ -242,6 +266,23 @@ function PreferencesInner() {
                       because the daily limit has been reached. The scheduler may assign you on those days.
                     </div>
                   )}
+                </div>
+
+                {/* Preferred dates */}
+                <div className="card space-y-3">
+                  <h3 className="font-semibold text-slate-700">Shifts I Want to Work</h3>
+                  <p className="text-xs text-slate-500">
+                    Tap a date to request it. The scheduler will prioritize these days.
+                    Auto-saves as you edit.
+                  </p>
+                  <PreferredCalendar
+                    key={selectedPeriod.id + "-pref"}
+                    year={selectedPeriod.year}
+                    month={selectedPeriod.month}
+                    preferred={preferred}
+                    onChange={handlePreferredChange}
+                    prefersTwelveHour={(session.user as any).prefersTwelveHour}
+                  />
                 </div>
 
                 {/* Notes */}

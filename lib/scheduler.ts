@@ -26,6 +26,7 @@ export interface PhysicianData {
   isPRN:            boolean
   prefersTwelveHour: boolean
   blockedDates:     string[]  // "YYYY-MM-DD"
+  preferredDates:   string[]  // "YYYY-MM-DD"
   targetShifts:     number
 }
 
@@ -148,6 +149,9 @@ export function runScheduler(
 
       // PRN penalty
       if (p.isPRN) score -= 40
+
+      // Preferred date bonus
+      if (p.preferredDates.includes(slot.date)) score += 20
 
       // Rest quality bonus (more rest = better circadian)
       const gap = start - lastEnd[p.id]
