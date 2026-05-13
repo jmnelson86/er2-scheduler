@@ -1,72 +1,74 @@
 "use client"
 
 import { useState } from "react"
-import { getDaysInMonth, format } from "date-fns"
+import { getDaysInMonth, format, startOfMonth, getDay } from "date-fns"
 
 interface Physician {
   id:    string
   name:  string
   isPRN: boolean
   prefersTwelveHour: boolean
+  color: string
 }
 
 interface Assignment {
-  id:          string
-  date:        string
-  shiftType:   string
-  userId:      string | null
-  isLocked:    boolean
-  isConflict:  boolean
+  id:           string
+  date:         string
+  shiftType:    string
+  userId:       string | null
+  isLocked:     boolean
+  isConflict:   boolean
   conflictNote: string
   user: Physician | null
 }
 
 interface Props {
-  year:       number
-  month:      number
-  assignments: Assignment[]
-  physicians:  Physician[]
-  onReassign: (assignmentId: string, userId: string | null) => Promise<void>
+  year:         number
+  month:        number
+  assignments:  Assignment[]
+  physicians:   Physician[]
+  onReassign:   (assignmentId: string, userId: string | null) => Promise<void>
   onToggleLock: (assignmentId: string) => Promise<void>
 }
 
 const SHIFT_SHORT: Record<string, string> = {
-  "24H":   "24H",
-  DAY12:   "DAY",
-  NIGHT12: "NGT",
-}
-const SHIFT_COLOR: Record<string, string> = {
-  "24H":   "bg-blue-100 text-blue-900 ring-blue-200",
-  DAY12:   "bg-amber-100 text-amber-900 ring-amber-200",
-  NIGHT12: "bg-indigo-100 text-indigo-900 ring-indigo-200",
+  "24H":    "24H",
+  DAY12:    "DAY",
+  NIGHT12:  "NGT",
 }
 
-const PHYSICIAN_COLORS = [
-  "bg-sky-500",      "bg-emerald-500", "bg-violet-500",  "bg-rose-500",
-  "bg-amber-500",    "bg-teal-500",    "bg-pink-500",    "bg-indigo-500",
-  "bg-lime-500",     "bg-cyan-500",    "bg-fuchsia-500", "bg-orange-500",
-  "bg-green-600",    "bg-blue-600",
-]
+const DOW_HEADERS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 const MONTH_NAMES = [
-  "","January","February","March","April","May","June",
-  "July","August","September","October","November","December",
+  "", "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
 ]
+
+const ORDER = { "24H": 0, DAY12: 1, NIGHT12: 2 }
+
+function lastName(name: string) {
+  // Drop "Dr. " prefix, return last word
+  const stripped = name.replace(/^Dr\.\s*/i, "")
+  const parts = stripped.trim().split(/\s+/)
+  return parts[parts.length - 1]
+}
 
 export default function ScheduleGrid({
   year, month, assignments, physicians, onReassign, onToggleLock,
 }: Props) {
-  const [openCell, setOpenCell]   = useState<string | null>(null)  // assignmentId
-  const [saving,   setSaving]     = useState<string | null>(null)
+  const [openCell, setOpenCell] = useState<string | null>(null)  // assignmentId
+  const [saving,   setSaving]   = useState<string | null>(null)
 
+  // Build physician color map from each physician's chosen color
   const physColorMap: Record<string, string> = {}
-  physicians.forEach((p, i) => {
-    physColorMap[p.id] = PHYSICIAN_COLORS[i % PHYSICIAN_COLORS.length]
+  physicians.forEach((p) => {
+    physColorMap[p.id] = p.color ?? "#6366f1"
   })
 
-  const daysInMonth = getDaysInMonth(new Date(year, month - 1))
+  const daysInMonth    = getDaysInMonth(new Date(year, month - 1))
+  const firstDayOfWeek = getDay(startOfMonth(new Date(year, month - 1)))  // 0=Sun
 
-  // Build map: date → assignments (sorted: 24H first, then DAY12, then NIGHT12)
+  // Build map: date → assignments sorted by type
   const byDate: Record<string, Assignment[]> = {}
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`
@@ -75,11 +77,19 @@ export default function ScheduleGrid({
   for (const a of assignments) {
     if (byDate[a.date]) byDate[a.date].push(a)
   }
-  // Sort each day's assignments: 24H, DAY12, NIGHT12
-  const ORDER = { "24H": 0, DAY12: 1, NIGHT12: 2 }
   for (const dateStr of Object.keys(byDate)) {
-    byDate[dateStr].sort((a, b) => (ORDER[a.shiftType as keyof typeof ORDER] ?? 0) - (ORDER[b.shiftType as keyof typeof ORDER] ?? 0))
+    byDate[dateStr].sort(
+      (a, b) =>
+        (ORDER[a.shiftType as keyof typeof ORDER] ?? 0) -
+        (ORDER[b.shiftType as keyof typeof ORDER] ?? 0)
+    )
   }
+
+  // Today string for highlight
+  const todayStr = (() => {
+    const t = new Date()
+    return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`
+  })()
 
   async function handleReassign(assignmentId: string, userId: string | null) {
     setSaving(assignmentId)
@@ -94,158 +104,236 @@ export default function ScheduleGrid({
     setSaving(null)
   }
 
-  const days = Object.keys(byDate).sort()
+  // Build the flat list of cells: leading empty pads + day cells
+  const cells: Array<{ type: "empty" } | { type: "day"; dateStr: string; dayNum: number; isWeekend: boolean }> = []
+  for (let i = 0; i < firstDayOfWeek; i++) {
+    cells.push({ type: "empty" })
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr    = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`
+    const dow        = (firstDayOfWeek + d - 1) % 7
+    const isWeekend  = dow === 0 || dow === 6
+    cells.push({ type: "day", dateStr, dayNum: d, isWeekend })
+  }
+
+  // Physicians who have at least one assignment this month
+  const activephysIds = new Set(assignments.filter((a) => a.userId).map((a) => a.userId!))
+  const legendPhysicians = physicians.filter((p) => activephysIds.has(p.id))
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-4">
       <p className="text-xs text-slate-500">
-        Click a cell to reassign. 🔒 = manually locked.
+        Click a shift block to reassign. 🔒 = manually locked.
       </p>
 
-      {/* Legend */}
-      <div className="flex flex-wrap gap-3 text-xs mb-4">
-        {[
-          { key: "24H",    label: "24H (9AM–9AM)" },
-          { key: "DAY12",  label: "DAY 12h (9AM–9PM)" },
-          { key: "NIGHT12",label: "NGT 12h (9PM–9AM)" },
-        ].map((s) => (
-          <span key={s.key} className={`flex items-center gap-1 px-2 py-1 rounded-full ring-1 ${SHIFT_COLOR[s.key]}`}>
-            {s.label}
-          </span>
-        ))}
-      </div>
+      {/* Month header */}
+      <h2 className="text-lg font-semibold text-slate-800">
+        {MONTH_NAMES[month]} {year}
+      </h2>
 
-      {/* Grid */}
-      <div className="space-y-1">
-        {days.map((dateStr) => {
-          const dayAssignments = byDate[dateStr]
-          const d = new Date(dateStr + "T12:00:00")
-          const dow = d.getDay()
-          const isWeekend = dow === 0 || dow === 6
-          const dayNum = d.getDate()
-          const dayName = d.toLocaleDateString("en-US", { weekday: "short" })
+      {/* Calendar grid */}
+      <div className="grid grid-cols-7 border-l border-t border-slate-200">
+        {/* Day-of-week headers */}
+        {DOW_HEADERS.map((h) => (
+          <div
+            key={h}
+            className="border-r border-b border-slate-200 px-1.5 py-1 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide bg-slate-50"
+          >
+            {h}
+          </div>
+        ))}
+
+        {/* Day cells */}
+        {cells.map((cell, idx) => {
+          if (cell.type === "empty") {
+            return (
+              <div
+                key={`empty-${idx}`}
+                className="border-r border-b border-slate-200 bg-slate-50 min-h-[80px]"
+              />
+            )
+          }
+
+          const { dateStr, dayNum, isWeekend } = cell
+          const dayAssignments = byDate[dateStr] ?? []
+          const isToday = dateStr === todayStr
 
           return (
             <div
               key={dateStr}
-              className={`flex items-stretch gap-1 rounded-lg px-2 py-1.5 ${
-                isWeekend ? "bg-slate-100" : "bg-white ring-1 ring-slate-100"
+              className={`border-r border-b border-slate-200 min-h-[80px] p-1 flex flex-col gap-0.5 ${
+                isToday   ? "bg-blue-50" :
+                isWeekend ? "bg-slate-50" :
+                "bg-white"
               }`}
             >
-              {/* Date label */}
-              <div className="w-16 shrink-0 flex flex-col justify-center">
-                <span className={`text-xs font-semibold ${isWeekend ? "text-slate-500" : "text-slate-700"}`}>
-                  {dayName} {dayNum}
-                </span>
-              </div>
-
-              {/* Shift cells */}
-              <div className="flex flex-1 flex-wrap gap-1.5">
-                {dayAssignments.length === 0 ? (
-                  <span className="text-xs text-slate-300 italic flex items-center">No coverage</span>
+              {/* Day number */}
+              <span
+                className={`text-xs font-bold mb-0.5 ${
+                  isToday   ? "text-blue-700" :
+                  isWeekend ? "text-slate-400" :
+                  "text-slate-700"
+                }`}
+              >
+                {isToday ? (
+                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold">
+                    {dayNum}
+                  </span>
                 ) : (
-                  dayAssignments.map((a) => {
-                    const isOpen = openCell === a.id
-                    const isSaving = saving === a.id
-                    const doc = a.user
+                  dayNum
+                )}
+              </span>
 
-                    return (
-                      <div key={a.id} className="relative">
-                        {/* Cell */}
+              {/* Shift blocks */}
+              {dayAssignments.map((a) => {
+                const isOpen    = openCell === a.id
+                const isSaving  = saving === a.id
+                const doc       = a.user
+                const physColor = doc ? (physColorMap[doc.id] ?? "#6366f1") : "#94a3b8"
+
+                return (
+                  <div key={a.id} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setOpenCell(isOpen ? null : a.id)}
+                      className={`
+                        w-full text-left text-xs rounded flex items-center gap-0.5 pl-0 pr-1 py-0.5
+                        transition select-none overflow-hidden
+                        ${a.isConflict
+                          ? "bg-red-100 text-red-800 ring-1 ring-red-300"
+                          : "bg-slate-100 text-slate-800"}
+                        ${isOpen ? "ring-2 ring-blue-500 shadow" : "hover:brightness-95"}
+                      `}
+                    >
+                      {/* Left color bar */}
+                      <span
+                        className="w-1 self-stretch rounded-l shrink-0"
+                        style={{ backgroundColor: physColor, minWidth: "4px" }}
+                      />
+                      <span className="ml-0.5 font-mono text-[9px] text-slate-500 shrink-0">
+                        {SHIFT_SHORT[a.shiftType] ?? a.shiftType}
+                      </span>
+                      <span className="ml-0.5 truncate text-[10px] font-medium flex items-center gap-0.5">
+                        {isSaving && <span className="animate-spin text-[9px]">⟳</span>}
+                        {a.isLocked && <span className="text-[9px]">🔒</span>}
+                        {doc ? (
+                          lastName(doc.name)
+                        ) : (
+                          <span className="text-red-600 font-semibold">⚠ Open</span>
+                        )}
+                      </span>
+                    </button>
+
+                    {/* Dropdown */}
+                    {isOpen && (
+                      <div className="absolute top-full left-0 mt-1 z-50 bg-white rounded-xl shadow-xl ring-1 ring-slate-200 min-w-[220px] overflow-hidden">
+                        <div className="px-3 py-2 bg-slate-50 border-b border-slate-200">
+                          <p className="text-xs font-semibold text-slate-700">
+                            {format(new Date(dateStr + "T12:00:00"), "EEE, MMM d")} – {a.shiftType}
+                          </p>
+                          {a.isConflict && (
+                            <p className="text-xs text-red-600 mt-0.5">{a.conflictNote}</p>
+                          )}
+                        </div>
+
+                        {/* Lock toggle */}
                         <button
                           type="button"
-                          onClick={() => setOpenCell(isOpen ? null : a.id)}
-                          className={`
-                            flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium
-                            ring-1 transition select-none
-                            ${a.isConflict
-                              ? "bg-red-100 text-red-800 ring-red-300"
-                              : SHIFT_COLOR[a.shiftType]}
-                            ${isOpen ? "ring-2 ring-blue-500 shadow-md" : "hover:opacity-80"}
-                          `}
+                          onClick={() => handleLock(a.id)}
+                          className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 text-slate-600 border-b border-slate-100"
                         >
-                          {a.isLocked && <span className="text-[10px]">🔒</span>}
-                          {isSaving && <span className="text-[10px] animate-spin">⟳</span>}
-                          <span className="font-mono text-[10px] opacity-60">{SHIFT_SHORT[a.shiftType]}</span>
-                          {doc ? (
-                            <>
-                              <span className={`w-3.5 h-3.5 rounded-full ${physColorMap[doc.id]} shrink-0`} />
-                              <span>{doc.name.replace("Dr. ", "")}</span>
-                              {doc.isPRN && <span className="text-[9px] opacity-60">PRN</span>}
-                            </>
-                          ) : (
-                            <span className="text-red-600">⚠ Unassigned</span>
-                          )}
+                          {a.isLocked ? "🔓 Unlock assignment" : "🔒 Lock assignment"}
                         </button>
 
-                        {/* Dropdown */}
-                        {isOpen && (
-                          <div className="absolute top-full left-0 mt-1 z-50 bg-white rounded-xl shadow-xl ring-1 ring-slate-200 min-w-[220px] overflow-hidden">
-                            <div className="px-3 py-2 bg-slate-50 border-b border-slate-200">
-                              <p className="text-xs font-semibold text-slate-700">
-                                {format(new Date(dateStr + "T12:00:00"), "EEE, MMM d")} – {a.shiftType}
+                        {/* Unassign */}
+                        <button
+                          type="button"
+                          onClick={() => handleReassign(a.id, null)}
+                          className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 border-b border-slate-100"
+                        >
+                          ✕ Leave unassigned
+                        </button>
+
+                        {/* Physician groups */}
+                        {[false, true].map((isPRN) => {
+                          const group = physicians.filter((p) => p.isPRN === isPRN)
+                          if (group.length === 0) return null
+                          return (
+                            <div key={String(isPRN)}>
+                              <p className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                                {isPRN ? "PRN" : "Regular"}
                               </p>
-                              {a.isConflict && (
-                                <p className="text-xs text-red-600 mt-0.5">{a.conflictNote}</p>
-                              )}
+                              {group.map((p) => (
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  onClick={() => handleReassign(a.id, p.id)}
+                                  className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-slate-50 transition ${
+                                    a.userId === p.id ? "bg-blue-50 font-semibold" : ""
+                                  }`}
+                                >
+                                  <span
+                                    className="w-3.5 h-3.5 rounded-full shrink-0"
+                                    style={{ backgroundColor: physColorMap[p.id] ?? "#6366f1" }}
+                                  />
+                                  <span>{p.name.replace("Dr. ", "")}</span>
+                                  <span className="ml-auto text-[10px] text-slate-400">
+                                    {p.prefersTwelveHour ? "12h" : "24h"}
+                                  </span>
+                                </button>
+                              ))}
                             </div>
-
-                            {/* Lock toggle */}
-                            <button
-                              type="button"
-                              onClick={() => handleLock(a.id)}
-                              className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 text-slate-600 border-b border-slate-100"
-                            >
-                              {a.isLocked ? "🔓 Unlock assignment" : "🔒 Lock assignment"}
-                            </button>
-
-                            {/* Unassign */}
-                            <button
-                              type="button"
-                              onClick={() => handleReassign(a.id, null)}
-                              className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 border-b border-slate-100"
-                            >
-                              ✕ Leave unassigned
-                            </button>
-
-                            {/* Physician groups */}
-                            {[false, true].map((isPRN) => {
-                              const group = physicians.filter((p) => p.isPRN === isPRN)
-                              if (group.length === 0) return null
-                              return (
-                                <div key={String(isPRN)}>
-                                  <p className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wide">
-                                    {isPRN ? "PRN" : "Regular"}
-                                  </p>
-                                  {group.map((p) => (
-                                    <button
-                                      key={p.id}
-                                      type="button"
-                                      onClick={() => handleReassign(a.id, p.id)}
-                                      className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-slate-50 transition ${
-                                        a.userId === p.id ? "bg-blue-50 font-semibold" : ""
-                                      }`}
-                                    >
-                                      <span className={`w-3.5 h-3.5 rounded-full ${physColorMap[p.id]} shrink-0`} />
-                                      <span>{p.name.replace("Dr. ", "")}</span>
-                                      <span className="ml-auto text-[10px] text-slate-400">
-                                        {p.prefersTwelveHour ? "12h" : "24h"}
-                                      </span>
-                                    </button>
-                                  ))}
-                                </div>
-                              )
-                            })}
-                          </div>
-                        )}
+                          )
+                        })}
                       </div>
-                    )
-                  })
-                )}
-              </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )
         })}
+      </div>
+
+      {/* Legends */}
+      <div className="flex flex-wrap gap-6 text-xs mt-4">
+        {/* Physician legend */}
+        {legendPhysicians.length > 0 && (
+          <div className="space-y-1">
+            <p className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Physicians</p>
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              {legendPhysicians.map((p) => (
+                <span key={p.id} className="flex items-center gap-1.5">
+                  <span
+                    className="w-3 h-3 rounded-full shrink-0"
+                    style={{ backgroundColor: physColorMap[p.id] ?? "#6366f1" }}
+                  />
+                  <span className="text-slate-700">{p.name.replace("Dr. ", "")}</span>
+                  {p.isPRN && <span className="text-slate-400">(PRN)</span>}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Shift type legend */}
+        <div className="space-y-1">
+          <p className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Shift Types</p>
+          <div className="flex flex-wrap gap-3">
+            {[
+              { key: "24H",    label: "24H  (9AM–9AM)" },
+              { key: "DAY12",  label: "DAY  12h (9AM–9PM)" },
+              { key: "NIGHT12",label: "NGT  12h (9PM–9AM)" },
+            ].map((s) => (
+              <span key={s.key} className="flex items-center gap-1 text-slate-600">
+                <span className="font-mono text-[10px] bg-slate-100 rounded px-1 py-0.5">
+                  {SHIFT_SHORT[s.key]}
+                </span>
+                {s.label}
+              </span>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   )

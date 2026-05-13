@@ -11,6 +11,7 @@ declare module "next-auth" {
       prefersTwelveHour: boolean
       useHoursTarget: boolean
       username: string
+      color: string
     }
   }
 }

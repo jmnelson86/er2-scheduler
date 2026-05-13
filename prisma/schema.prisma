@@ -18,6 +18,7 @@ model User {
   adminTargetShifts Int?     // admin-set shift target (overrides physician's if set)
   adminHardCap      Boolean  @default(false)  // if true, scheduler never exceeds adminTargetShifts
   useHoursTarget    Boolean  @default(false)  // true = use hours instead of shift counts
+  color             String   @default("#6366f1")
   createdAt         DateTime @default(now())
 
   preferences      PhysicianPreference[]

@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
 
   const rawAssignments = await prisma.shiftAssignment.findMany({
     where:   { periodId },
-    include: { user: { select: { id: true, name: true, isPRN: true, prefersTwelveHour: true } } },
+    include: { user: { select: { id: true, name: true, isPRN: true, prefersTwelveHour: true, color: true } } },
     orderBy: { date: "asc" },
   })
 
@@ -73,7 +73,7 @@ export async function PATCH(req: NextRequest) {
       const updated = await prisma.shiftAssignment.update({
         where: { id: assignmentId },
         data:  { isLocked: lock },
-        include: { user: { select: { id: true, name: true, isPRN: true, prefersTwelveHour: true } } },
+        include: { user: { select: { id: true, name: true, isPRN: true, prefersTwelveHour: true, color: true } } },
       })
       return Response.json({ assignment: { ...updated, conflictNote: updated.conflictNote ?? "" } })
     }
@@ -103,7 +103,7 @@ export async function PATCH(req: NextRequest) {
         isConflict:  !!conflicts[assignmentId],
         conflictNote: conflicts[assignmentId] ?? null,
       },
-      include: { user: { select: { id: true, name: true, isPRN: true, prefersTwelveHour: true } } },
+      include: { user: { select: { id: true, name: true, isPRN: true, prefersTwelveHour: true, color: true } } },
     })
 
     return Response.json({ assignment: { ...updated, conflictNote: updated.conflictNote ?? "" } })
@@ -140,7 +140,7 @@ export async function DELETE(req: NextRequest) {
 
   const remaining = await prisma.shiftAssignment.findMany({
     where:   { periodId },
-    include: { user: { select: { id: true, name: true, isPRN: true, prefersTwelveHour: true } } },
+    include: { user: { select: { id: true, name: true, isPRN: true, prefersTwelveHour: true, color: true } } },
     orderBy: { date: "asc" },
   })
 

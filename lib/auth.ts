@@ -32,6 +32,7 @@ export const authOptions: NextAuthOptions = {
           prefersTwelveHour: user.prefersTwelveHour,
           useHoursTarget: user.useHoursTarget,
           username: user.username,
+          color: user.color,
         }
       },
     }),
@@ -45,6 +46,7 @@ export const authOptions: NextAuthOptions = {
         token.prefersTwelveHour = (user as any).prefersTwelveHour
         token.useHoursTarget    = (user as any).useHoursTarget
         token.username          = (user as any).username
+        token.color             = (user as any).color
       }
       return token
     },
@@ -56,6 +58,7 @@ export const authOptions: NextAuthOptions = {
         ;(session.user as any).prefersTwelveHour = token.prefersTwelveHour
         ;(session.user as any).useHoursTarget   = token.useHoursTarget
         ;(session.user as any).username         = token.username
+        ;(session.user as any).color            = token.color
       }
       return session
     },

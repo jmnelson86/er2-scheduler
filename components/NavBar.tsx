@@ -61,6 +61,7 @@ export default function NavBar() {
                 <Link href="/preferences"   className={linkClass("/preferences")}>Preferences</Link>
                 <Link href="/schedule"      className={linkClass("/schedule")}>My Schedule</Link>
                 <Link href="/shift-offers"  className={linkClass("/shift-offers")}>Shift Offers</Link>
+                <Link href="/settings"     className={linkClass("/settings")}>⚙ Settings</Link>
               </>
             )}
           </div>
