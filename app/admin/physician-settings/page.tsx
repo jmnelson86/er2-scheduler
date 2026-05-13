@@ -14,6 +14,7 @@ interface PhysicianRow {
   prefersTwelveHour: boolean
   adminTargetShifts: number | null
   adminHardCap:      boolean
+  useHoursTarget:    boolean
   // loaded separately per period
   minShifts?:        number | null
   targetShifts?:     number | null
@@ -41,7 +42,7 @@ export default function PhysicianSettingsPage() {
   const [loading, setLoading]       = useState(true)
 
   // Local edit state per physician
-  const [edits, setEdits] = useState<Record<string, { adminTargetShifts: string; adminHardCap: boolean; prefersTwelveHour: boolean }>>({})
+  const [edits, setEdits] = useState<Record<string, { adminTargetShifts: string; adminHardCap: boolean; prefersTwelveHour: boolean; useHoursTarget: boolean }>>({})
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login")
@@ -61,6 +62,7 @@ export default function PhysicianSettingsPage() {
           adminTargetShifts: d.adminTargetShifts != null ? String(d.adminTargetShifts) : "",
           adminHardCap:      d.adminHardCap,
           prefersTwelveHour: d.prefersTwelveHour,
+          useHoursTarget:    d.useHoursTarget,
         }
       }
       setEdits(initialEdits)
@@ -99,7 +101,7 @@ export default function PhysicianSettingsPage() {
       .catch(() => {/* preferences endpoint may not exist yet */})
   }, [selectedPeriodId, physicians.length])
 
-  function setEdit(userId: string, field: "adminTargetShifts" | "adminHardCap" | "prefersTwelveHour", value: string | boolean) {
+  function setEdit(userId: string, field: "adminTargetShifts" | "adminHardCap" | "prefersTwelveHour" | "useHoursTarget", value: string | boolean) {
     setEdits((prev) => ({ ...prev, [userId]: { ...prev[userId], [field]: value } }))
   }
 
@@ -115,6 +117,7 @@ export default function PhysicianSettingsPage() {
         adminTargetShifts,
         adminHardCap:      edit.adminHardCap,
         prefersTwelveHour: edit.prefersTwelveHour,
+        useHoursTarget:    edit.useHoursTarget,
       }),
     })
     setSaving((prev) => ({ ...prev, [userId]: false }))
@@ -175,6 +178,7 @@ export default function PhysicianSettingsPage() {
                 <th className="px-4 py-3 font-medium">Admin Target</th>
                 <th className="px-4 py-3 font-medium">Hard Cap</th>
                 <th className="px-4 py-3 font-medium">Shift Length</th>
+                <th className="px-4 py-3 font-medium" title="Use hours for physicians who mix 24h and 12h shifts">Track By</th>
                 <th className="px-4 py-3 font-medium text-slate-400">
                   Physician Request (min / ideal / max)
                 </th>
@@ -183,7 +187,7 @@ export default function PhysicianSettingsPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {physicians.map((doc) => {
-                const edit = edits[doc.id] ?? { adminTargetShifts: "", adminHardCap: false, prefersTwelveHour: false }
+                const edit = edits[doc.id] ?? { adminTargetShifts: "", adminHardCap: false, prefersTwelveHour: false, useHoursTarget: false }
                 const isSaving = saving[doc.id] ?? false
                 const isSaved  = saved[doc.id]  ?? false
                 return (
@@ -234,6 +238,22 @@ export default function PhysicianSettingsPage() {
                         {edit.prefersTwelveHour ? "12h shifts" : "24h shifts"}
                       </button>
                     </td>
+                    {/* Track by toggle */}
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => setEdit(doc.id, "useHoursTarget", !edit.useHoursTarget)}
+                        className={`px-3 py-1 rounded-full text-xs font-semibold ring-1 transition ${
+                          edit.useHoursTarget
+                            ? "bg-purple-100 text-purple-700 ring-purple-300 hover:bg-purple-200"
+                            : "bg-slate-100 text-slate-600 ring-slate-300 hover:bg-slate-200"
+                        }`}
+                        title="Use 'Hours' for physicians who mix 24h and 12h shifts"
+                        aria-label={`Track by mode for ${doc.name}`}
+                      >
+                        {edit.useHoursTarget ? "Hours" : "Shifts"}
+                      </button>
+                    </td>
                     <td className="px-4 py-3 text-slate-500">
                       {doc.targetShifts != null ? (
                         <span>
@@ -271,6 +291,7 @@ export default function PhysicianSettingsPage() {
           <p><strong>Admin Target:</strong> Overrides the physician&apos;s ideal shift count during scheduling. Leave blank to use the physician&apos;s own request.</p>
           <p><strong>Hard Cap:</strong> When checked, the scheduler will never assign more shifts than the admin target. When unchecked, the admin target is used for scoring only (soft guidance).</p>
           <p><strong>Shift Length:</strong> Sets whether the physician prefers 12-hour (day/night) or 24-hour shifts. Click the button to toggle, then click Save.</p>
+          <p><strong>Track By:</strong> Use &ldquo;Hours&rdquo; for physicians who work both 24h and 12h shifts so targets are expressed in total hours rather than shift counts (eliminates ambiguity — &ldquo;3 shifts&rdquo; could mean 72h or 36h). The physician will enter hour targets in their preferences page when this is enabled.</p>
         </div>
       </main>
     </div>

@@ -33,6 +33,10 @@ export interface PhysicianData {
   maxShifts:         number   // maximum (default: targetShifts + 3)
   adminTargetShifts?: number  // admin override
   adminHardCap:      boolean  // if true, hard stop at adminTargetShifts
+  useHoursTarget:    boolean  // if true, use hours instead of shift counts for scoring/capping
+  targetHours:       number   // ideal total hours/month (used when useHoursTarget=true)
+  minHours:          number   // minimum hours
+  maxHours:          number   // maximum hours
 }
 
 export interface SlotInput {
@@ -114,6 +118,12 @@ export function runScheduler(
   const shiftCount: Record<string, number> = {}
   physicians.forEach((p) => { shiftCount[p.id] = 0 })
 
+  // Track total hours worked per physician (for useHoursTarget mode)
+  const hoursWorked: Record<string, number> = {}
+  physicians.forEach((p) => { hoursWorked[p.id] = 0 })
+
+  const SHIFT_HOURS: Record<string, number> = { "24H": 24, "DAY12": 12, "NIGHT12": 12 }
+
   const results: Assignment[] = []
 
   for (const slot of slots) {
@@ -127,6 +137,14 @@ export function runScheduler(
       if (!canStart) return false
       // Hard cap check — exclude if admin hard cap reached
       if (p.adminHardCap && p.adminTargetShifts != null && shiftCount[p.id] >= p.adminTargetShifts) return false
+      // Hours-mode hard cap check
+      if (p.useHoursTarget) {
+        const slotHours = SHIFT_HOURS[slot.shiftType]
+        const effectiveMaxHours = (p.adminHardCap && p.adminTargetShifts != null)
+          ? p.adminTargetShifts
+          : p.maxHours
+        if (hoursWorked[p.id] + slotHours > effectiveMaxHours) return false
+      }
       return true
     })
 
@@ -156,15 +174,29 @@ export function runScheduler(
       if (slot.shiftType !== "24H" && p.prefersTwelveHour)  score += 60
       if (slot.shiftType === "24H" && !p.prefersTwelveHour) score += 30
 
-      // Under effective target — incentivize
-      const remaining = effectiveTarget - shiftCount[p.id]
-      score += Math.max(0, remaining) * 10
+      if (p.useHoursTarget) {
+        // Hours-mode scoring
+        const slotHours = SHIFT_HOURS[slot.shiftType]
+        const effectiveTargetHours = p.adminTargetShifts ?? p.targetHours
+        const effectiveMaxHours = (p.adminHardCap && p.adminTargetShifts != null)
+          ? p.adminTargetShifts
+          : p.maxHours
+        const remainingHours = effectiveTargetHours - hoursWorked[p.id]
+        score += Math.max(0, remainingHours / 12) * 5
+        if (hoursWorked[p.id] >= effectiveTargetHours) score -= 25
+        if (hoursWorked[p.id] + slotHours > effectiveMaxHours) score -= 60
+      } else {
+        // Shift-count scoring
+        // Under effective target — incentivize
+        const remaining = effectiveTarget - shiftCount[p.id]
+        score += Math.max(0, remaining) * 10
 
-      // Penalty for going over effective target
-      if (shiftCount[p.id] >= effectiveTarget) score -= 25
+        // Penalty for going over effective target
+        if (shiftCount[p.id] >= effectiveTarget) score -= 25
 
-      // Soft cap penalty — strong penalty for exceeding max
-      if (shiftCount[p.id] >= effectiveMax) score -= 60
+        // Soft cap penalty — strong penalty for exceeding max
+        if (shiftCount[p.id] >= effectiveMax) score -= 60
+      }
 
       // PRN penalty
       if (p.isPRN) score -= 40
@@ -191,6 +223,7 @@ export function runScheduler(
 
     lastEnd[winner.id] = end
     shiftCount[winner.id]++
+    hoursWorked[winner.id] += SHIFT_HOURS[slot.shiftType]
 
     results.push({
       date:        slot.date,

@@ -21,6 +21,7 @@ export async function GET() {
       prefersTwelveHour: true,
       adminTargetShifts: true,
       adminHardCap:      true,
+      useHoursTarget:    true,
     },
   })
 
@@ -36,7 +37,7 @@ export async function PATCH(req: NextRequest) {
     return Response.json({ error: "Unauthorized" }, { status: 401 })
 
   const body = await req.json()
-  const { userId, adminTargetShifts, adminHardCap, prefersTwelveHour } = body
+  const { userId, adminTargetShifts, adminHardCap, prefersTwelveHour, useHoursTarget } = body
 
   if (!userId) return Response.json({ error: "userId required" }, { status: 400 })
 
@@ -55,6 +56,10 @@ export async function PATCH(req: NextRequest) {
     data.prefersTwelveHour = Boolean(prefersTwelveHour)
   }
 
+  if (useHoursTarget !== undefined) {
+    data.useHoursTarget = Boolean(useHoursTarget)
+  }
+
   if (Object.keys(data).length === 0) {
     return Response.json({ error: "No valid fields provided" }, { status: 400 })
   }
@@ -70,6 +75,7 @@ export async function PATCH(req: NextRequest) {
       prefersTwelveHour: true,
       adminTargetShifts: true,
       adminHardCap:      true,
+      useHoursTarget:    true,
     },
   })
 

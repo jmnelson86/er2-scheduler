@@ -37,6 +37,9 @@ function PreferencesInner() {
   const [targetShifts, setTargetShifts] = useState(15)
   const [minShifts, setMinShifts]       = useState(12)
   const [maxShifts, setMaxShifts]       = useState(18)
+  const [targetHours, setTargetHours]   = useState(72)
+  const [minHours, setMinHours]         = useState(48)
+  const [maxHours, setMaxHours]         = useState(96)
   const [notes, setNotes]               = useState("")
   const [waitlisted, setWaitlisted]     = useState<string[]>([])
   const [saving, setSaving]             = useState(false)
@@ -85,6 +88,9 @@ function PreferencesInner() {
       setTargetShifts(target)
       setMinShifts(prefData.preference?.minShifts ?? Math.max(1, target - 3))
       setMaxShifts(prefData.preference?.maxShifts ?? target + 3)
+      setTargetHours(prefData.preference?.targetHours ?? 72)
+      setMinHours(prefData.preference?.minHours ?? 48)
+      setMaxHours(prefData.preference?.maxHours ?? 96)
       setNotes(prefData.preference?.notes ?? "")
       setSubmitted(!!prefData.preference?.submittedAt)
       setBlocked((blockedData.dates ?? []).map((d: any) => ({ date: d.date, type: d.type, hardness: (d.hardness ?? "REQUIRED") as "REQUIRED" | "PREFERRED" })))
@@ -132,13 +138,22 @@ function PreferencesInner() {
     prefDebounceRef.current = setTimeout(() => savePreferred(dates), 800)
   }
 
+  const useHoursTarget = (session?.user as any)?.useHoursTarget ?? false
+
   async function handleSaveDraft() {
     if (!selectedId) return
     setSaving(true)
     await fetch("/api/preferences", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ periodId: selectedId, targetShifts, minShifts, maxShifts, notes }),
+      body:    JSON.stringify({
+        periodId: selectedId,
+        targetShifts,
+        minShifts,
+        maxShifts,
+        ...(useHoursTarget ? { targetHours, minHours, maxHours } : {}),
+        notes,
+      }),
     })
     setSaving(false)
     setSaved(true)
@@ -152,7 +167,15 @@ function PreferencesInner() {
     await fetch("/api/preferences", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ periodId: selectedId, targetShifts, minShifts, maxShifts, notes, submit: true }),
+      body:    JSON.stringify({
+        periodId: selectedId,
+        targetShifts,
+        minShifts,
+        maxShifts,
+        ...(useHoursTarget ? { targetHours, minHours, maxHours } : {}),
+        notes,
+        submit: true,
+      }),
     })
     setSubmitting(false)
     setSubmitted(true)
@@ -228,53 +251,103 @@ function PreferencesInner() {
                   </div>
                 </div>
 
-                {/* Target shifts */}
-                <div className="card space-y-4">
-                  <h3 className="font-semibold text-slate-700">Shift Count Request</h3>
-                  <p className="text-xs text-slate-500">
-                    The scheduler will try to hit your ideal, staying between your min and max.
-                  </p>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <label className="label">Minimum shifts</label>
-                      <input
-                        type="number"
-                        min={1}
-                        max={31}
-                        value={minShifts}
-                        onChange={(e) => setMinShifts(Number(e.target.value))}
-                        className="input w-full"
-                      />
+                {/* Target shifts / hours */}
+                {useHoursTarget ? (
+                  <div className="card space-y-4">
+                    <h3 className="font-semibold text-slate-700">Hours Request</h3>
+                    <p className="text-xs text-slate-500">
+                      The scheduler will try to hit your ideal total hours, staying between your min and max.
+                    </p>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <label className="label">Minimum hours</label>
+                        <input
+                          type="number"
+                          min={12}
+                          max={744}
+                          step={12}
+                          value={minHours}
+                          onChange={(e) => setMinHours(Number(e.target.value))}
+                          className="input w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="label">Ideal hours</label>
+                        <input
+                          type="number"
+                          min={12}
+                          max={744}
+                          step={12}
+                          value={targetHours}
+                          onChange={(e) => setTargetHours(Number(e.target.value))}
+                          className="input w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="label">Maximum hours</label>
+                        <input
+                          type="number"
+                          min={12}
+                          max={744}
+                          step={12}
+                          value={maxHours}
+                          onChange={(e) => setMaxHours(Number(e.target.value))}
+                          className="input w-full"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <label className="label">Ideal shifts</label>
-                      <input
-                        type="number"
-                        min={1}
-                        max={31}
-                        value={targetShifts}
-                        onChange={(e) => setTargetShifts(Number(e.target.value))}
-                        className="input w-full"
-                      />
-                    </div>
-                    <div>
-                      <label className="label">Maximum shifts</label>
-                      <input
-                        type="number"
-                        min={1}
-                        max={31}
-                        value={maxShifts}
-                        onChange={(e) => setMaxShifts(Number(e.target.value))}
-                        className="input w-full"
-                      />
-                    </div>
+                    <p className="text-xs text-slate-400">
+                      24h shift = 24 hrs &middot; 12h shift = 12 hrs &middot; e.g. 3&times;24h shifts = 72 hrs
+                    </p>
                   </div>
-                  <p className="text-xs text-slate-400">
-                    {(session.user as any).prefersTwelveHour
-                      ? "Each 12h shift counts as one shift."
-                      : "Each 24h shift counts as one shift."}
-                  </p>
-                </div>
+                ) : (
+                  <div className="card space-y-4">
+                    <h3 className="font-semibold text-slate-700">Shift Count Request</h3>
+                    <p className="text-xs text-slate-500">
+                      The scheduler will try to hit your ideal, staying between your min and max.
+                    </p>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <label className="label">Minimum shifts</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={31}
+                          value={minShifts}
+                          onChange={(e) => setMinShifts(Number(e.target.value))}
+                          className="input w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="label">Ideal shifts</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={31}
+                          value={targetShifts}
+                          onChange={(e) => setTargetShifts(Number(e.target.value))}
+                          className="input w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="label">Maximum shifts</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={31}
+                          value={maxShifts}
+                          onChange={(e) => setMaxShifts(Number(e.target.value))}
+                          className="input w-full"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      {(session.user as any).prefersTwelveHour
+                        ? "Each 12h shift counts as one shift."
+                        : "Each 24h shift counts as one shift."}
+                    </p>
+                  </div>
+                )}
 
                 {/* Blocked dates */}
                 <div className="card space-y-3">

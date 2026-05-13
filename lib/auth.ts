@@ -30,6 +30,7 @@ export const authOptions: NextAuthOptions = {
           role: user.role,
           isPRN: user.isPRN,
           prefersTwelveHour: user.prefersTwelveHour,
+          useHoursTarget: user.useHoursTarget,
           username: user.username,
         }
       },
@@ -42,6 +43,7 @@ export const authOptions: NextAuthOptions = {
         token.role              = (user as any).role
         token.isPRN             = (user as any).isPRN
         token.prefersTwelveHour = (user as any).prefersTwelveHour
+        token.useHoursTarget    = (user as any).useHoursTarget
         token.username          = (user as any).username
       }
       return token
@@ -52,6 +54,7 @@ export const authOptions: NextAuthOptions = {
         ;(session.user as any).role             = token.role
         ;(session.user as any).isPRN            = token.isPRN
         ;(session.user as any).prefersTwelveHour = token.prefersTwelveHour
+        ;(session.user as any).useHoursTarget   = token.useHoursTarget
         ;(session.user as any).username         = token.username
       }
       return session

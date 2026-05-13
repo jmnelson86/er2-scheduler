@@ -70,6 +70,10 @@ export async function POST(req: NextRequest) {
       maxShifts:        pref?.maxShifts ?? target + 3,
       adminTargetShifts: (p as any).adminTargetShifts ?? undefined,
       adminHardCap:     (p as any).adminHardCap ?? false,
+      useHoursTarget:   (p as any).useHoursTarget ?? false,
+      targetHours:      pref?.targetHours ?? 72,
+      minHours:         pref?.minHours ?? 48,
+      maxHours:         pref?.maxHours ?? 96,
     }
   })
 

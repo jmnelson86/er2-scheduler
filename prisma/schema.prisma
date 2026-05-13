@@ -17,6 +17,7 @@ model User {
   isActive          Boolean  @default(true)
   adminTargetShifts Int?     // admin-set shift target (overrides physician's if set)
   adminHardCap      Boolean  @default(false)  // if true, scheduler never exceeds adminTargetShifts
+  useHoursTarget    Boolean  @default(false)  // true = use hours instead of shift counts
   createdAt         DateTime @default(now())
 
   preferences      PhysicianPreference[]
@@ -51,6 +52,9 @@ model PhysicianPreference {
   targetShifts Int       @default(15)
   minShifts    Int?      // minimum they'll accept
   maxShifts    Int?      // maximum they'll accept
+  targetHours  Int?      // ideal total hours/month (used when useHoursTarget=true)
+  minHours     Int?      // minimum hours
+  maxHours     Int?      // maximum hours
   notes        String?
   submittedAt  DateTime?
   createdAt    DateTime  @default(now())
