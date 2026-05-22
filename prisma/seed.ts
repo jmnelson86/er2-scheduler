@@ -3,8 +3,14 @@ import { PrismaLibSql } from "@prisma/adapter-libsql"
 import bcrypt from "bcryptjs"
 import path from "path"
 
-const dbUrl  = `file:${path.resolve(__dirname, "../er2-scheduler.db")}`
-const adapter = new PrismaLibSql({ url: dbUrl } as any)
+const rawUrl = process.env.DATABASE_URL ?? `file:${path.resolve(__dirname, "../er2-scheduler.db")}`
+const dbUrl = rawUrl.startsWith("file:./")
+  ? `file:${path.resolve(rawUrl.slice(7))}`
+  : rawUrl
+const authToken = process.env.DATABASE_AUTH_TOKEN
+const adapterConfig: any = { url: dbUrl }
+if (authToken) adapterConfig.authToken = authToken
+const adapter = new PrismaLibSql(adapterConfig)
 const prisma  = new PrismaClient({ adapter } as any)
 
 async function main() {
