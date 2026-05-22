@@ -70,10 +70,7 @@ export async function POST(req: NextRequest) {
       maxShifts:        pref?.maxShifts ?? target + 3,
       adminTargetShifts: (p as any).adminTargetShifts ?? undefined,
       adminHardCap:     (p as any).adminHardCap ?? false,
-      useHoursTarget:   (p as any).useHoursTarget ?? false,
-      targetHours:      pref?.targetHours ?? 72,
-      minHours:         pref?.minHours ?? 48,
-      maxHours:         pref?.maxHours ?? 96,
+      allowedShiftTypes: (p as any).allowedShiftTypes ?? "ALL",
     }
   })
 
@@ -111,10 +108,10 @@ export async function POST(req: NextRequest) {
     })),
   })
 
-  // Update period status
+  // Update period status to DRAFT (schedule generated, ready for review)
   await prisma.schedulePeriod.update({
     where: { id: periodId },
-    data:  { status: "GENERATING" },
+    data:  { status: "DRAFT" },
   })
 
   // Fetch all assignments to return

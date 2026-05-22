@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 })
 
   const body = await req.json()
-  const { periodId, targetShifts, minShifts, maxShifts, targetHours, minHours, maxHours, notes, submit } = body
+  const { periodId, targetShifts, minShifts, maxShifts, notes, submit } = body
 
   if (!periodId) return Response.json({ error: "periodId required" }, { status: 400 })
 
@@ -39,9 +39,6 @@ export async function POST(req: NextRequest) {
       targetShifts: targetShifts ?? 15,
       minShifts:    minShifts ?? null,
       maxShifts:    maxShifts ?? null,
-      targetHours:  targetHours ?? null,
-      minHours:     minHours ?? null,
-      maxHours:     maxHours ?? null,
       notes:        notes ?? null,
       submittedAt:  submit ? new Date() : null,
     },
@@ -49,9 +46,6 @@ export async function POST(req: NextRequest) {
       targetShifts: targetShifts ?? 15,
       minShifts:    minShifts ?? null,
       maxShifts:    maxShifts ?? null,
-      targetHours:  targetHours ?? null,
-      minHours:     minHours ?? null,
-      maxHours:     maxHours ?? null,
       notes:        notes ?? null,
       ...(submit ? { submittedAt: new Date() } : {}),
     },

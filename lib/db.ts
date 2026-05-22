@@ -4,12 +4,17 @@ import path from "path"
 
 function createPrisma() {
   const dbFile = process.env.DATABASE_URL ?? "file:./er2-scheduler.db"
-  // libsql needs an absolute file URL
-  const absUrl = dbFile.startsWith("file:./")
+  const authToken = process.env.DATABASE_AUTH_TOKEN
+
+  // libsql needs an absolute file URL for local files
+  const url = dbFile.startsWith("file:./")
     ? `file:${path.resolve(dbFile.slice(7))}`
     : dbFile
 
-  const adapter = new PrismaLibSql({ url: absUrl } as any)
+  const config: any = { url }
+  if (authToken) config.authToken = authToken
+
+  const adapter = new PrismaLibSql(config)
   return new PrismaClient({ adapter } as any)
 }
 

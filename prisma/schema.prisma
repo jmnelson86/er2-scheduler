@@ -17,7 +17,7 @@ model User {
   isActive          Boolean  @default(true)
   adminTargetShifts Int?     // admin-set shift target (overrides physician's if set)
   adminHardCap      Boolean  @default(false)  // if true, scheduler never exceeds adminTargetShifts
-  useHoursTarget    Boolean  @default(false)  // true = use hours instead of shift counts
+  allowedShiftTypes String   @default("ALL")  // "ALL" or comma-sep list: "24H","DAY12","NIGHT12"
   color             String   @default("#6366f1")
   createdAt         DateTime @default(now())
 
@@ -28,6 +28,7 @@ model User {
   offeredShifts    ShiftOffer[] @relation("OfferedShifts")
   targetedTrades   ShiftOffer[] @relation("TargetedTrades")
   pickupRequests   ShiftOffer[] @relation("PickupRequests")
+  recurringPrefs   RecurringPreference[]
 }
 
 model SchedulePeriod {
@@ -53,9 +54,6 @@ model PhysicianPreference {
   targetShifts Int       @default(15)
   minShifts    Int?      // minimum they'll accept
   maxShifts    Int?      // maximum they'll accept
-  targetHours  Int?      // ideal total hours/month (used when useHoursTarget=true)
-  minHours     Int?      // minimum hours
-  maxHours     Int?      // maximum hours
   notes        String?
   submittedAt  DateTime?
   createdAt    DateTime  @default(now())
@@ -120,6 +118,19 @@ model AdminSetting {
   id    String @id @default(cuid())
   key   String @unique
   value String
+}
+
+model RecurringPreference {
+  id        String   @id @default(cuid())
+  userId    String
+  dow       Int      // 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
+  blockType String   // "OFF_REQUIRED" | "OFF_PREFERRED" | "AVAILABLE"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, dow])
 }
 
 model PreferredDate {

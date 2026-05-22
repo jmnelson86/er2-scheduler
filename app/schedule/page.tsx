@@ -3,7 +3,7 @@ import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/db"
 import NavBar from "@/components/NavBar"
-import ShiftList from "@/components/ShiftList"
+import MyScheduleCalendar from "@/components/MyScheduleCalendar"
 
 export default async function MySchedulePage() {
   const session = await getServerSession(authOptions)
@@ -12,7 +12,10 @@ export default async function MySchedulePage() {
 
   const assignments = await prisma.shiftAssignment.findMany({
     where:   { userId: session.user.id },
-    include: { period: true },
+    include: {
+      period: true,
+      offer:  { select: { status: true } },
+    },
     orderBy: { date: "asc" },
   })
 
@@ -20,9 +23,12 @@ export default async function MySchedulePage() {
     <div className="min-h-screen" style={{ background: "#f4f6fb" }}>
       <NavBar />
 
-      <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
-        <h1 className="text-2xl font-bold text-slate-900">My Schedule</h1>
-        <ShiftList assignments={assignments} />
+      <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">My Schedule</h1>
+          <p className="text-slate-500 mt-1 text-sm">Your assigned shifts by month.</p>
+        </div>
+        <MyScheduleCalendar assignments={assignments} />
       </main>
     </div>
   )

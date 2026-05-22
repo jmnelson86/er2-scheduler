@@ -16,7 +16,7 @@ export async function GET() {
 
   const user = await prisma.user.findUnique({
     where:  { id: (session.user as any).id },
-    select: { id: true, name: true, username: true, color: true, prefersTwelveHour: true },
+    select: { id: true, name: true, username: true, color: true, prefersTwelveHour: true, allowedShiftTypes: true },
   })
   if (!user) return Response.json({ error: "User not found" }, { status: 404 })
 
@@ -28,15 +28,24 @@ export async function PATCH(req: NextRequest) {
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 })
 
   const body = await req.json()
-  const { color } = body
+  const { color, allowedShiftTypes } = body
+  const data: Record<string, unknown> = {}
 
   if (color !== undefined) {
     if (!ALLOWED_COLORS.includes(color)) {
       return Response.json({ error: "Invalid color" }, { status: 400 })
     }
+    data.color = color
+  }
+
+  if (allowedShiftTypes !== undefined) {
+    data.allowedShiftTypes = String(allowedShiftTypes)
+  }
+
+  if (Object.keys(data).length > 0) {
     await prisma.user.update({
       where: { id: (session.user as any).id },
-      data:  { color },
+      data,
     })
   }
 

@@ -120,6 +120,63 @@ export async function PATCH(req: NextRequest) {
   return Response.json({ period })
 }
 
+// PUT /api/admin/schedule
+//   { action: "split", assignmentId }          → delete 24H, create DAY12 + NIGHT12
+//   { action: "add",   periodId, date, shiftType } → create a new empty assignment
+export async function PUT(req: NextRequest) {
+  const session = await getServerSession(authOptions)
+  if (!session || session.user.role !== "ADMIN")
+    return Response.json({ error: "Unauthorized" }, { status: 401 })
+
+  const body = await req.json()
+
+  // ── Split 24H → DAY12 + NIGHT12 ──────────────────────────────────────────
+  if (body.action === "split") {
+    const { assignmentId } = body
+    const a = await prisma.shiftAssignment.findUnique({ where: { id: assignmentId } })
+    if (!a) return Response.json({ error: "Assignment not found" }, { status: 404 })
+    if (a.shiftType !== "24H")
+      return Response.json({ error: "Only 24H assignments can be split" }, { status: 400 })
+
+    await prisma.shiftAssignment.delete({ where: { id: assignmentId } })
+
+    const day12 = await prisma.shiftAssignment.create({
+      data: { periodId: a.periodId, date: a.date, shiftType: "DAY12",   userId: null, isLocked: false, isConflict: false, conflictNote: null },
+      include: { user: { select: { id: true, name: true, isPRN: true, prefersTwelveHour: true, color: true } } },
+    })
+    const night12 = await prisma.shiftAssignment.create({
+      data: { periodId: a.periodId, date: a.date, shiftType: "NIGHT12", userId: null, isLocked: false, isConflict: false, conflictNote: null },
+      include: { user: { select: { id: true, name: true, isPRN: true, prefersTwelveHour: true, color: true } } },
+    })
+
+    return Response.json({
+      removed: assignmentId,
+      added: [
+        { ...day12,   conflictNote: day12.conflictNote   ?? "" },
+        { ...night12, conflictNote: night12.conflictNote ?? "" },
+      ],
+    })
+  }
+
+  // ── Add a new empty slot ──────────────────────────────────────────────────
+  if (body.action === "add") {
+    const { periodId, date, shiftType } = body
+    if (!periodId || !date || !shiftType)
+      return Response.json({ error: "periodId, date, shiftType required" }, { status: 400 })
+
+    const assignment = await prisma.shiftAssignment.create({
+      data: { periodId, date, shiftType, userId: null, isLocked: false, isConflict: false, conflictNote: null },
+      include: { user: { select: { id: true, name: true, isPRN: true, prefersTwelveHour: true, color: true } } },
+    })
+
+    return Response.json({
+      assignment: { ...assignment, conflictNote: assignment.conflictNote ?? "" },
+    })
+  }
+
+  return Response.json({ error: "Unknown action" }, { status: 400 })
+}
+
 // DELETE /api/admin/schedule?periodId=xxx → clear non-locked assignments
 export async function DELETE(req: NextRequest) {
   const session = await getServerSession(authOptions)

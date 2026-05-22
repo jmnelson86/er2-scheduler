@@ -26,17 +26,14 @@ export interface PhysicianData {
   isPRN:            boolean
   prefersTwelveHour: boolean
   hardBlockedDates: string[]  // REQUIRED — never assign
-  softBlockedDates: string[]  // PREFERRED — large penalty, last resort
-  preferredDates:   string[]  // "YYYY-MM-DD"
+  softBlockedDates: string[]  // PREFERRED — also hard block; never assign
+  preferredDates:   string[]  // "YYYY-MM-DD" — if any set, physician only works these days
   targetShifts:      number   // ideal shifts
   minShifts:         number   // minimum (default: targetShifts - 3, min 1)
   maxShifts:         number   // maximum (default: targetShifts + 3)
   adminTargetShifts?: number  // admin override
   adminHardCap:      boolean  // if true, hard stop at adminTargetShifts
-  useHoursTarget:    boolean  // if true, use hours instead of shift counts for scoring/capping
-  targetHours:       number   // ideal total hours/month (used when useHoursTarget=true)
-  minHours:          number   // minimum hours
-  maxHours:          number   // maximum hours
+  allowedShiftTypes: string   // "ALL" or comma-sep: "24H","DAY12","NIGHT12"
 }
 
 export interface SlotInput {
@@ -69,11 +66,16 @@ function dayIndex(dateStr: string) {
 
 /**
  * Build the slot list for a month.
- * Decision: for each day, if at least one 12h-preferring physician is available
- * AND there's another physician available for the paired slot, split the day.
- * Otherwise use a 24H slot.
  *
- * We do a two-pass approach: first decide coverage type per day, then assign.
+ * Strategy: compute how many 24H days vs split (DAY12+NIGHT12) days the month
+ * needs to satisfy each physician group's shift targets, then assign those day
+ * types to the calendar days where the relevant physicians are most available.
+ *
+ * - Physicians who prefer 24H  (prefersTwelveHour=false) consume one 24H slot/day.
+ * - Physicians who prefer 12H  (prefersTwelveHour=true)  consume one DAY12 or
+ *   NIGHT12 slot/day; each split day provides both.
+ *
+ * Slots are still created for every day — no day is left uncovered.
  */
 export function buildSlots(
   year: number,
@@ -81,20 +83,93 @@ export function buildSlots(
   physicians: PhysicianData[]
 ): SlotInput[] {
   const days = getDaysInMonth(new Date(year, month - 1))
-  const slots: SlotInput[] = []
 
+  // Build date strings for every day
+  const dateStrings: string[] = []
   for (let d = 0; d < days; d++) {
-    const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(d + 1).padStart(2, "0")}`
-    // Heuristic: check if any active (non-hard-blocked) physician prefers 12h
-    const availPhy = physicians.filter((p) => !p.hardBlockedDates.includes(dateStr))
-    const has12hPref = availPhy.some((p) => p.prefersTwelveHour)
+    dateStrings.push(
+      `${year}-${String(month).padStart(2, "0")}-${String(d + 1).padStart(2, "0")}`
+    )
+  }
 
-    if (has12hPref && availPhy.length >= 2) {
-      // Split into DAY12 + NIGHT12
+  // Helper: is a physician actually available on a given date?
+  function isAvailableOn(p: PhysicianData, dateStr: string): boolean {
+    if (p.hardBlockedDates.includes(dateStr)) return false
+    if (p.softBlockedDates.includes(dateStr)) return false
+    if (p.preferredDates.length > 0 && !p.preferredDates.includes(dateStr)) return false
+    return true
+  }
+
+  // Helper: does a physician's allowedShiftTypes permit a given shift type?
+  function canWorkType(p: PhysicianData, type: string): boolean {
+    if (p.allowedShiftTypes === "ALL") return true
+    return p.allowedShiftTypes.split(",").map((s) => s.trim()).includes(type)
+  }
+
+  // Split physicians into groups by effective shift-type capability & preference
+  const physicians24h = physicians.filter(
+    (p) => !p.prefersTwelveHour && canWorkType(p, "24H")
+  )
+  const physicians12h = physicians.filter(
+    (p) => p.prefersTwelveHour && (canWorkType(p, "DAY12") || canWorkType(p, "NIGHT12"))
+  )
+
+  // Total target shifts for each group (use admin override if set)
+  const total24hTarget = physicians24h.reduce(
+    (s, p) => s + (p.adminTargetShifts ?? p.targetShifts), 0
+  )
+  const total12hTarget = physicians12h.reduce(
+    (s, p) => s + (p.adminTargetShifts ?? p.targetShifts), 0
+  )
+
+  // Each split day provides 2 twelve-hour slots (DAY12 + NIGHT12).
+  // Each full day provides 1 twenty-four-hour slot.
+  const idealSplitDays = Math.ceil(total12hTarget / 2)
+  const ideal24hDays   = total24hTarget
+  const totalIdeal     = ideal24hDays + idealSplitDays
+
+  let num24h: number, numSplit: number
+
+  if (totalIdeal === 0) {
+    // No physicians configured — default all days to 24H
+    num24h = days; numSplit = 0
+  } else if (totalIdeal <= days) {
+    // Enough days to satisfy both groups; fill remaining proportionally
+    num24h   = ideal24hDays
+    numSplit = idealSplitDays
+    const extra = days - totalIdeal
+    const extra24h = total24hTarget > 0
+      ? Math.round(extra * (ideal24hDays / totalIdeal))
+      : 0
+    num24h   += extra24h
+    numSplit += extra - extra24h
+  } else {
+    // More demand than days — scale proportionally
+    numSplit = Math.round(days * (idealSplitDays / totalIdeal))
+    num24h   = days - numSplit
+  }
+
+  // For each calendar day, score how many 24H-eligible physicians are available
+  // vs how many 12H-eligible physicians are available.
+  // Days with a stronger 24H advantage get assigned as 24H days.
+  const dayScores = dateStrings.map((dateStr) => {
+    const avail24h = physicians24h.filter((p) => isAvailableOn(p, dateStr)).length
+    const avail12h = physicians12h.filter((p) => isAvailableOn(p, dateStr)).length
+    return { dateStr, score: avail24h - avail12h }
+  })
+
+  // The `num24h` days with the highest score become 24H days; the rest split.
+  const sortedDesc = [...dayScores].sort((a, b) => b.score - a.score)
+  const use24h = new Set(sortedDesc.slice(0, num24h).map((d) => d.dateStr))
+
+  // Emit slots in calendar order
+  const slots: SlotInput[] = []
+  for (const dateStr of dateStrings) {
+    if (use24h.has(dateStr)) {
+      slots.push({ date: dateStr, shiftType: "24H" })
+    } else {
       slots.push({ date: dateStr, shiftType: "DAY12" })
       slots.push({ date: dateStr, shiftType: "NIGHT12" })
-    } else {
-      slots.push({ date: dateStr, shiftType: "24H" })
     }
   }
   return slots
@@ -118,44 +193,52 @@ export function runScheduler(
   const shiftCount: Record<string, number> = {}
   physicians.forEach((p) => { shiftCount[p.id] = 0 })
 
-  // Track total hours worked per physician (for useHoursTarget mode)
-  const hoursWorked: Record<string, number> = {}
-  physicians.forEach((p) => { hoursWorked[p.id] = 0 })
-
-  const SHIFT_HOURS: Record<string, number> = { "24H": 24, "DAY12": 12, "NIGHT12": 12 }
-
   const results: Assignment[] = []
 
   for (const slot of slots) {
     const d = dayIndex(slot.date)
     const { start, end } = slotMinutes(d, slot.shiftType)
 
-    // Candidates: not HARD blocked, respects rest gap, not over hard cap
+    // Candidates: not blocked (hard or preferred), respects rest gap, not over hard cap, shift type allowed
     const candidates = physicians.filter((p) => {
       if (p.hardBlockedDates.includes(slot.date)) return false  // Hard block — excluded
+      if (p.softBlockedDates.includes(slot.date)) return false  // Preferred day off — also excluded
+      // Availability constraint: if a physician listed preferred (available) dates,
+      // they can ONLY be scheduled on those days. No preferred dates = available all month.
+      if (p.preferredDates.length > 0 && !p.preferredDates.includes(slot.date)) return false
+      // Allowed shift types filter
+      if (p.allowedShiftTypes !== "ALL") {
+        const allowed = p.allowedShiftTypes.split(",").map((s) => s.trim())
+        if (!allowed.includes(slot.shiftType)) return false
+      }
       const canStart = lastEnd[p.id] + MIN_REST <= start
       if (!canStart) return false
       // Hard cap check — exclude if admin hard cap reached
       if (p.adminHardCap && p.adminTargetShifts != null && shiftCount[p.id] >= p.adminTargetShifts) return false
-      // Hours-mode hard cap check
-      if (p.useHoursTarget) {
-        const slotHours = SHIFT_HOURS[slot.shiftType]
-        const effectiveMaxHours = (p.adminHardCap && p.adminTargetShifts != null)
-          ? p.adminTargetShifts
-          : p.maxHours
-        if (hoursWorked[p.id] + slotHours > effectiveMaxHours) return false
-      }
       return true
     })
 
     if (candidates.length === 0) {
-      // No valid candidate — flag conflict
+      // Determine why no candidate was available for a more helpful conflict note
+      const notHardBlocked = physicians.filter((p) => !p.hardBlockedDates.includes(slot.date))
+      const notAnyBlocked = notHardBlocked.filter((p) => !p.softBlockedDates.includes(slot.date))
+      const notAvailRestricted = notAnyBlocked.filter(
+        (p) => p.preferredDates.length === 0 || p.preferredDates.includes(slot.date)
+      )
+      const conflictNote = notHardBlocked.length === 0
+        ? "No available physician — all have required days off on this date"
+        : notAnyBlocked.length === 0
+        ? "No available physician — all have this date marked as a day off"
+        : notAvailRestricted.length === 0
+        ? "No available physician — all have this date outside their listed availability"
+        : "No available physician — rest gap or cap constraints prevented assignment"
+
       results.push({
         date:        slot.date,
         shiftType:   slot.shiftType,
         userId:      null,
         isConflict:  true,
-        conflictNote: "No available physician — all have required days off on this date",
+        conflictNote,
       })
       continue
     }
@@ -174,38 +257,19 @@ export function runScheduler(
       if (slot.shiftType !== "24H" && p.prefersTwelveHour)  score += 60
       if (slot.shiftType === "24H" && !p.prefersTwelveHour) score += 30
 
-      if (p.useHoursTarget) {
-        // Hours-mode scoring
-        const slotHours = SHIFT_HOURS[slot.shiftType]
-        const effectiveTargetHours = p.adminTargetShifts ?? p.targetHours
-        const effectiveMaxHours = (p.adminHardCap && p.adminTargetShifts != null)
-          ? p.adminTargetShifts
-          : p.maxHours
-        const remainingHours = effectiveTargetHours - hoursWorked[p.id]
-        score += Math.max(0, remainingHours / 12) * 5
-        if (hoursWorked[p.id] >= effectiveTargetHours) score -= 25
-        if (hoursWorked[p.id] + slotHours > effectiveMaxHours) score -= 60
-      } else {
-        // Shift-count scoring
-        // Under effective target — incentivize
-        const remaining = effectiveTarget - shiftCount[p.id]
-        score += Math.max(0, remaining) * 10
+      // Shift-count scoring
+      // Under effective target — incentivize
+      const remaining = effectiveTarget - shiftCount[p.id]
+      score += Math.max(0, remaining) * 10
 
-        // Penalty for going over effective target
-        if (shiftCount[p.id] >= effectiveTarget) score -= 25
+      // Penalty for going over effective target
+      if (shiftCount[p.id] >= effectiveTarget) score -= 25
 
-        // Soft cap penalty — strong penalty for exceeding max
-        if (shiftCount[p.id] >= effectiveMax) score -= 60
-      }
+      // Soft cap penalty — strong penalty for exceeding max
+      if (shiftCount[p.id] >= effectiveMax) score -= 60
 
       // PRN penalty
       if (p.isPRN) score -= 40
-
-      // Soft block penalty — large, last resort only
-      if (p.softBlockedDates.includes(slot.date)) score -= 80
-
-      // Preferred date bonus
-      if (p.preferredDates.includes(slot.date)) score += 20
 
       // Rest quality bonus (more rest = better circadian)
       const gap = start - lastEnd[p.id]
@@ -219,20 +283,16 @@ export function runScheduler(
 
     scored.sort((a, b) => b.score - a.score)
     const winner = scored[0].p
-    const winnerHasSoftBlock = winner.softBlockedDates.includes(slot.date)
 
     lastEnd[winner.id] = end
     shiftCount[winner.id]++
-    hoursWorked[winner.id] += SHIFT_HOURS[slot.shiftType]
 
     results.push({
       date:        slot.date,
       shiftType:   slot.shiftType,
       userId:      winner.id,
-      isConflict:  winnerHasSoftBlock,
-      conflictNote: winnerHasSoftBlock
-        ? "Physician assigned on a preferred day off — no other physicians available"
-        : "",
+      isConflict:  false,
+      conflictNote: "",
     })
   }
 

@@ -29,6 +29,8 @@ interface Props {
   physicians:   Physician[]
   onReassign:   (assignmentId: string, userId: string | null) => Promise<void>
   onToggleLock: (assignmentId: string) => Promise<void>
+  onSplit?:     (assignmentId: string) => Promise<void>
+  onAddSlot?:   (date: string, shiftType: "DAY12" | "NIGHT12") => Promise<void>
 }
 
 const SHIFT_SHORT: Record<string, string> = {
@@ -54,10 +56,11 @@ function lastName(name: string) {
 }
 
 export default function ScheduleGrid({
-  year, month, assignments, physicians, onReassign, onToggleLock,
+  year, month, assignments, physicians, onReassign, onToggleLock, onSplit, onAddSlot,
 }: Props) {
   const [openCell, setOpenCell] = useState<string | null>(null)  // assignmentId
   const [saving,   setSaving]   = useState<string | null>(null)
+  const [addingSlot, setAddingSlot] = useState<string | null>(null)  // "date::shiftType"
 
   // Build physician color map from each physician's chosen color
   const physColorMap: Record<string, string> = {}
@@ -102,6 +105,36 @@ export default function ScheduleGrid({
     setSaving(assignmentId)
     await onToggleLock(assignmentId)
     setSaving(null)
+  }
+
+  async function handleSplit(assignmentId: string) {
+    if (!onSplit) return
+    setSaving(assignmentId)
+    setOpenCell(null)
+    await onSplit(assignmentId)
+    setSaving(null)
+  }
+
+  async function handleAddSlot(date: string, shiftType: "DAY12" | "NIGHT12") {
+    if (!onAddSlot) return
+    const key = `${date}::${shiftType}`
+    setAddingSlot(key)
+    await onAddSlot(date, shiftType)
+    setAddingSlot(null)
+  }
+
+  // Physician shift counts (for summary table)
+  const shiftCounts: Record<string, { "24H": number; DAY12: number; NIGHT12: number; total: number }> = {}
+  for (const p of physicians) {
+    shiftCounts[p.id] = { "24H": 0, DAY12: 0, NIGHT12: 0, total: 0 }
+  }
+  for (const a of assignments) {
+    if (a.userId && shiftCounts[a.userId]) {
+      shiftCounts[a.userId].total++
+      if      (a.shiftType === "24H")    shiftCounts[a.userId]["24H"]++
+      else if (a.shiftType === "DAY12")  shiftCounts[a.userId].DAY12++
+      else if (a.shiftType === "NIGHT12") shiftCounts[a.userId].NIGHT12++
+    }
   }
 
   // Build the flat list of cells: leading empty pads + day cells
@@ -186,6 +219,7 @@ export default function ScheduleGrid({
 
               {/* Shift blocks */}
               {dayAssignments.map((a) => {
+
                 const isOpen    = openCell === a.id
                 const isSaving  = saving === a.id
                 const doc       = a.user
@@ -235,6 +269,17 @@ export default function ScheduleGrid({
                             <p className="text-xs text-red-600 mt-0.5">{a.conflictNote}</p>
                           )}
                         </div>
+
+                        {/* Split 24H into 12h shifts */}
+                        {a.shiftType === "24H" && onSplit && (
+                          <button
+                            type="button"
+                            onClick={() => handleSplit(a.id)}
+                            className="w-full text-left px-3 py-2 text-xs text-blue-600 hover:bg-blue-50 border-b border-slate-100"
+                          >
+                            ↕ Split into Day 12h + Night 12h
+                          </button>
+                        )}
 
                         {/* Lock toggle */}
                         <button
@@ -290,6 +335,32 @@ export default function ScheduleGrid({
                   </div>
                 )
               })}
+
+              {/* Add 12h slot buttons — shown when a day is missing one or both 12h slots */}
+              {onAddSlot && !dayAssignments.some((a) => a.shiftType === "24H") && (
+                <>
+                  {!dayAssignments.some((a) => a.shiftType === "DAY12") && (
+                    <button
+                      type="button"
+                      onClick={() => handleAddSlot(dateStr, "DAY12")}
+                      disabled={addingSlot === `${dateStr}::DAY12`}
+                      className="w-full text-[9px] text-amber-600 border border-dashed border-amber-300 rounded px-1 py-0.5 hover:bg-amber-50 transition leading-tight"
+                    >
+                      {addingSlot === `${dateStr}::DAY12` ? "…" : "+ DAY"}
+                    </button>
+                  )}
+                  {!dayAssignments.some((a) => a.shiftType === "NIGHT12") && (
+                    <button
+                      type="button"
+                      onClick={() => handleAddSlot(dateStr, "NIGHT12")}
+                      disabled={addingSlot === `${dateStr}::NIGHT12`}
+                      className="w-full text-[9px] text-indigo-600 border border-dashed border-indigo-300 rounded px-1 py-0.5 hover:bg-indigo-50 transition leading-tight"
+                    >
+                      {addingSlot === `${dateStr}::NIGHT12` ? "…" : "+ NGT"}
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           )
         })}
@@ -335,6 +406,58 @@ export default function ScheduleGrid({
           </div>
         </div>
       </div>
+
+      {/* Physician shift count summary */}
+      {physicians.length > 0 && (
+        <div className="mt-6">
+          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+            Shift Totals
+          </h3>
+          <div className="overflow-x-auto rounded-xl ring-1 ring-slate-200">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-left">
+                  <th className="px-3 py-2 font-semibold">Physician</th>
+                  <th className="px-3 py-2 font-semibold text-center">24H</th>
+                  <th className="px-3 py-2 font-semibold text-center">DAY</th>
+                  <th className="px-3 py-2 font-semibold text-center">NGT</th>
+                  <th className="px-3 py-2 font-semibold text-center">Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {[...physicians]
+                  .sort((a, b) => {
+                    if (a.isPRN !== b.isPRN) return a.isPRN ? 1 : -1
+                    return a.name.localeCompare(b.name)
+                  })
+                  .map((p) => {
+                    const c = shiftCounts[p.id] ?? { "24H": 0, DAY12: 0, NIGHT12: 0, total: 0 }
+                    return (
+                      <tr key={p.id} className={`transition ${c.total === 0 ? "bg-red-50" : "bg-white hover:bg-slate-50"}`}>
+                        <td className="px-3 py-2 flex items-center gap-2">
+                          <span
+                            className="w-2.5 h-2.5 rounded-full shrink-0"
+                            style={{ backgroundColor: physColorMap[p.id] ?? "#6366f1" }}
+                          />
+                          <span className={`font-medium ${c.total === 0 ? "text-red-700" : "text-slate-800"}`}>
+                            {p.name.replace(/^Dr\.\s*/i, "")}
+                          </span>
+                          {p.isPRN && <span className="text-slate-400">(PRN)</span>}
+                        </td>
+                        <td className="px-3 py-2 text-center text-slate-600">{c["24H"] || "—"}</td>
+                        <td className="px-3 py-2 text-center text-slate-600">{c.DAY12 || "—"}</td>
+                        <td className="px-3 py-2 text-center text-slate-600">{c.NIGHT12 || "—"}</td>
+                        <td className={`px-3 py-2 text-center font-bold ${c.total === 0 ? "text-red-600" : "text-slate-900"}`}>
+                          {c.total}
+                        </td>
+                      </tr>
+                    )
+                  })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import NavBar from "@/components/NavBar"
 import CalendarPicker from "@/components/CalendarPicker"
 import PreferredCalendar from "@/components/PreferredCalendar"
+import RecurringDayPicker from "@/components/RecurringDayPicker"
 import { Suspense } from "react"
 
 interface Period {
@@ -37,18 +38,25 @@ function PreferencesInner() {
   const [targetShifts, setTargetShifts] = useState(15)
   const [minShifts, setMinShifts]       = useState(12)
   const [maxShifts, setMaxShifts]       = useState(18)
-  const [targetHours, setTargetHours]   = useState(72)
-  const [minHours, setMinHours]         = useState(48)
-  const [maxHours, setMaxHours]         = useState(96)
   const [notes, setNotes]               = useState("")
+  const [allowedShiftTypes, setAllowedShiftTypes] = useState<string>("ALL")
   const [waitlisted, setWaitlisted]     = useState<string[]>([])
   const [saving, setSaving]             = useState(false)
   const [saved, setSaved]               = useState(false)
+  const [saveError, setSaveError]       = useState("")
   const [submitting, setSubmitting]     = useState(false)
   const [submitted, setSubmitted]       = useState(false)
+  const [submitError, setSubmitError]   = useState("")
   const [loadingPref, setLoadingPref]   = useState(false)
   const debounceRef      = useRef<ReturnType<typeof setTimeout> | null>(null)
   const prefDebounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const [recurringPrefs, setRecurringPrefs]       = useState<{ dow: number; blockType: string }[]>([])
+  const [recurringLoading, setRecurringLoading]   = useState(false)
+  const [recurringSaved, setRecurringSaved]         = useState(false)
+  const [applyingRecurring, setApplyingRecurring] = useState(false)
+  const [applyMsg, setApplyMsg]                   = useState("")
+  const [showRecurringBanner, setShowRecurringBanner] = useState(false)
 
   const selectedPeriod = periods.find((p) => p.id === selectedId)
 
@@ -57,19 +65,47 @@ function PreferencesInner() {
     if (status === "authenticated" && session?.user?.role === "ADMIN") router.push("/admin")
   }, [status, session, router])
 
-  // Load open periods
+  // Load own settings (allowedShiftTypes)
   useEffect(() => {
-    fetch("/api/periods/open")
+    fetch("/api/settings")
       .then((r) => r.json())
       .then((data) => {
-        setPeriods(data.periods ?? [])
-        const pidParam = searchParams.get("periodId")
-        if (pidParam && data.periods.some((p: Period) => p.id === pidParam)) {
-          setSelectedId(pidParam)
-        } else if (data.periods.length > 0) {
-          setSelectedId(data.periods[0].id)
-        }
+        if (data.allowedShiftTypes) setAllowedShiftTypes(data.allowedShiftTypes)
       })
+  }, [])
+
+  async function saveAllowedShiftTypes(val: string) {
+    setAllowedShiftTypes(val)
+    await fetch("/api/settings", {
+      method:  "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ allowedShiftTypes: val }),
+    })
+  }
+
+  function toggleMyShift(shiftType: string) {
+    const active = allowedShiftTypes === "ALL" ? ["24H","DAY12","NIGHT12"] : allowedShiftTypes.split(",").map((s) => s.trim())
+    const next = active.includes(shiftType) ? active.filter((s) => s !== shiftType) : [...active, shiftType]
+    if (next.length === 0) return  // must have at least one
+    const val = next.sort().join(",") === "24H,DAY12,NIGHT12" ? "ALL" : next.join(",")
+    saveAllowedShiftTypes(val)
+  }
+
+  // Load open periods + recurring prefs
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/periods/open").then((r) => r.json()),
+      fetch("/api/recurring-preferences").then((r) => r.json()),
+    ]).then(([data, recurData]) => {
+      setPeriods(data.periods ?? [])
+      setRecurringPrefs(recurData.prefs ?? [])
+      const pidParam = searchParams.get("periodId")
+      if (pidParam && data.periods.some((p: Period) => p.id === pidParam)) {
+        setSelectedId(pidParam)
+      } else if (data.periods.length > 0) {
+        setSelectedId(data.periods[0].id)
+      }
+    })
   }, [searchParams])
 
   // Load preferences when period changes
@@ -88,14 +124,18 @@ function PreferencesInner() {
       setTargetShifts(target)
       setMinShifts(prefData.preference?.minShifts ?? Math.max(1, target - 3))
       setMaxShifts(prefData.preference?.maxShifts ?? target + 3)
-      setTargetHours(prefData.preference?.targetHours ?? 72)
-      setMinHours(prefData.preference?.minHours ?? 48)
-      setMaxHours(prefData.preference?.maxHours ?? 96)
       setNotes(prefData.preference?.notes ?? "")
       setSubmitted(!!prefData.preference?.submittedAt)
       setBlocked((blockedData.dates ?? []).map((d: any) => ({ date: d.date, type: d.type, hardness: (d.hardness ?? "REQUIRED") as "REQUIRED" | "PREFERRED" })))
       setWaitlisted((blockedData.dates ?? []).filter((d: any) => d.status === "WAITLISTED").map((d: any) => d.date))
-      setPreferred((preferredData.dates ?? []).map((d: any) => ({ date: d.date, shiftType: d.shiftType ?? null })))
+      const preferredDates = (preferredData.dates ?? []).map((d: any) => ({ date: d.date, shiftType: d.shiftType ?? null }))
+      setPreferred(preferredDates)
+      // Show auto-apply banner if physician has recurring prefs and this period has no data yet
+      const hasNoData = (blockedData.dates ?? []).length === 0 && preferredDates.length === 0
+      setRecurringPrefs((rp) => {
+        setShowRecurringBanner(hasNoData && rp.length > 0)
+        return rp
+      })
       setLoadingPref(false)
     })
   }, [selectedId])
@@ -138,47 +178,105 @@ function PreferencesInner() {
     prefDebounceRef.current = setTimeout(() => savePreferred(dates), 800)
   }
 
-  const useHoursTarget = (session?.user as any)?.useHoursTarget ?? false
+  async function saveRecurringPrefs(prefs: typeof recurringPrefs) {
+    setRecurringLoading(true)
+    await fetch("/api/recurring-preferences", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prefs }),
+    })
+    setRecurringPrefs(prefs)
+    setRecurringLoading(false)
+    setRecurringSaved(true)
+    setTimeout(() => setRecurringSaved(false), 2000)
+  }
+
+  async function applyRecurringToMonth() {
+    if (!selectedId) return
+    setApplyingRecurring(true)
+    setApplyMsg("")
+    const res = await fetch("/api/recurring-preferences/apply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ periodId: selectedId }),
+    })
+    const data = await res.json()
+    setApplyMsg(`Applied: ${data.blocks ?? 0} day${data.blocks !== 1 ? "s" : ""} off, ${data.available ?? 0} available day${data.available !== 1 ? "s" : ""}`)
+    setApplyingRecurring(false)
+    setShowRecurringBanner(false)
+    // Reload blocked/preferred dates
+    if (selectedId) {
+      Promise.all([
+        fetch(`/api/blocked-dates?periodId=${selectedId}`).then((r) => r.json()),
+        fetch(`/api/preferred-dates?periodId=${selectedId}`).then((r) => r.json()),
+      ]).then(([blockedData, preferredData]) => {
+        setBlocked((blockedData.dates ?? []).map((d: any) => ({ date: d.date, type: d.type, hardness: (d.hardness ?? "REQUIRED") as "REQUIRED" | "PREFERRED" })))
+        setWaitlisted((blockedData.dates ?? []).filter((d: any) => d.status === "WAITLISTED").map((d: any) => d.date))
+        setPreferred((preferredData.dates ?? []).map((d: any) => ({ date: d.date, shiftType: d.shiftType ?? null })))
+      })
+    }
+    setTimeout(() => setApplyMsg(""), 4000)
+  }
 
   async function handleSaveDraft() {
     if (!selectedId) return
     setSaving(true)
-    await fetch("/api/preferences", {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({
-        periodId: selectedId,
-        targetShifts,
-        minShifts,
-        maxShifts,
-        ...(useHoursTarget ? { targetHours, minHours, maxHours } : {}),
-        notes,
-      }),
-    })
-    setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    setSaveError("")
+    try {
+      const res  = await fetch("/api/preferences", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          periodId: selectedId,
+          targetShifts,
+          minShifts,
+          maxShifts,
+          notes,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setSaveError(data.error ?? "Failed to save. Please try again.")
+      } else {
+        setSaved(true)
+        setTimeout(() => setSaved(false), 2000)
+      }
+    } catch {
+      setSaveError("Network error. Please try again.")
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!selectedId) return
     setSubmitting(true)
-    await fetch("/api/preferences", {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({
-        periodId: selectedId,
-        targetShifts,
-        minShifts,
-        maxShifts,
-        ...(useHoursTarget ? { targetHours, minHours, maxHours } : {}),
-        notes,
-        submit: true,
-      }),
-    })
-    setSubmitting(false)
-    setSubmitted(true)
+    setSubmitError("")
+    try {
+      const res  = await fetch("/api/preferences", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          periodId: selectedId,
+          targetShifts,
+          minShifts,
+          maxShifts,
+          notes,
+          submit: true,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setSubmitError(data.error ?? "Failed to submit. Please try again.")
+      } else {
+        setSubmitted(true)
+      }
+    } catch {
+      setSubmitError("Network error. Please try again.")
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   if (status === "loading" || !session) return null
@@ -234,6 +332,21 @@ function PreferencesInner() {
               )}
             </div>
 
+            {showRecurringBanner && selectedPeriod && (
+              <div className="rounded-xl bg-blue-50 ring-1 ring-blue-200 px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <p className="text-sm font-semibold text-blue-800">You have recurring preferences set</p>
+                  <p className="text-xs text-blue-600 mt-0.5">Apply your recurring day-off and availability patterns to {MONTH_NAMES[selectedPeriod.month]} {selectedPeriod.year}?</p>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <button type="button" onClick={() => setShowRecurringBanner(false)} className="text-xs text-blue-600 hover:underline">Skip</button>
+                  <button type="button" onClick={applyRecurringToMonth} disabled={applyingRecurring} className="btn-primary text-xs py-1.5 px-3">
+                    {applyingRecurring ? "Applying…" : "Apply"}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {loadingPref ? (
               <div className="text-slate-400 text-sm animate-pulse">Loading preferences…</div>
             ) : (
@@ -251,103 +364,121 @@ function PreferencesInner() {
                   </div>
                 </div>
 
-                {/* Target shifts / hours */}
-                {useHoursTarget ? (
-                  <div className="card space-y-4">
-                    <h3 className="font-semibold text-slate-700">Hours Request</h3>
-                    <p className="text-xs text-slate-500">
-                      The scheduler will try to hit your ideal total hours, staying between your min and max.
-                    </p>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div>
-                        <label className="label">Minimum hours</label>
-                        <input
-                          type="number"
-                          min={12}
-                          max={744}
-                          step={12}
-                          value={minHours}
-                          onChange={(e) => setMinHours(Number(e.target.value))}
-                          className="input w-full"
-                        />
-                      </div>
-                      <div>
-                        <label className="label">Ideal hours</label>
-                        <input
-                          type="number"
-                          min={12}
-                          max={744}
-                          step={12}
-                          value={targetHours}
-                          onChange={(e) => setTargetHours(Number(e.target.value))}
-                          className="input w-full"
-                        />
-                      </div>
-                      <div>
-                        <label className="label">Maximum hours</label>
-                        <input
-                          type="number"
-                          min={12}
-                          max={744}
-                          step={12}
-                          value={maxHours}
-                          onChange={(e) => setMaxHours(Number(e.target.value))}
-                          className="input w-full"
-                        />
-                      </div>
+                {/* Target shifts */}
+                <div className="card space-y-4">
+                  <h3 className="font-semibold text-slate-700">Shift Count Request</h3>
+                  <p className="text-xs text-slate-500">
+                    The scheduler will try to hit your ideal, staying between your min and max.
+                  </p>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <label className="label">Minimum shifts</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={31}
+                        value={minShifts}
+                        onChange={(e) => setMinShifts(Number(e.target.value))}
+                        className="input w-full"
+                      />
                     </div>
-                    <p className="text-xs text-slate-400">
-                      24h shift = 24 hrs &middot; 12h shift = 12 hrs &middot; e.g. 3&times;24h shifts = 72 hrs
+                    <div>
+                      <label className="label">Ideal shifts</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={31}
+                        value={targetShifts}
+                        onChange={(e) => setTargetShifts(Number(e.target.value))}
+                        className="input w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="label">Maximum shifts</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={31}
+                        value={maxShifts}
+                        onChange={(e) => setMaxShifts(Number(e.target.value))}
+                        className="input w-full"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Each shift (24h or 12h) counts as one shift toward your total.
+                  </p>
+                </div>
+
+                {/* Shift type availability */}
+                <div className="card space-y-3">
+                  <div>
+                    <h3 className="font-semibold text-slate-700">Shifts Available For</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Select the shift types you are available to work. Deselected types will never be assigned to you.
+                      Auto-saves when changed.
                     </p>
                   </div>
-                ) : (
-                  <div className="card space-y-4">
-                    <h3 className="font-semibold text-slate-700">Shift Count Request</h3>
-                    <p className="text-xs text-slate-500">
-                      The scheduler will try to hit your ideal, staying between your min and max.
+                  <div className="flex gap-3 flex-wrap">
+                    {(["24H","DAY12","NIGHT12"] as const).map((st) => {
+                      const labels: Record<string, string> = { "24H": "24-Hour (9AM–9AM)", "DAY12": "Day 12H (9AM–9PM)", "NIGHT12": "Night 12H (9PM–9AM)" }
+                      const active = allowedShiftTypes === "ALL" ? ["24H","DAY12","NIGHT12"] : allowedShiftTypes.split(",").map((s) => s.trim())
+                      const on = active.includes(st)
+                      return (
+                        <button
+                          key={st}
+                          type="button"
+                          onClick={() => toggleMyShift(st)}
+                          className={`px-4 py-2 rounded-xl text-sm font-semibold ring-1 transition ${
+                            on
+                              ? st === "24H"    ? "bg-blue-100 text-blue-800 ring-blue-300"
+                              : st === "DAY12"  ? "bg-amber-100 text-amber-800 ring-amber-300"
+                              :                   "bg-indigo-100 text-indigo-800 ring-indigo-300"
+                              : "bg-white text-slate-300 ring-slate-200"
+                          }`}
+                        >
+                          {on ? "✓ " : ""}{labels[st]}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {allowedShiftTypes !== "ALL" && (
+                    <p className="text-xs text-amber-700">
+                      ⚠ You are restricted to: {allowedShiftTypes.split(",").join(", ")}. The scheduler will only assign these shift types to you.
                     </p>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div>
-                        <label className="label">Minimum shifts</label>
-                        <input
-                          type="number"
-                          min={1}
-                          max={31}
-                          value={minShifts}
-                          onChange={(e) => setMinShifts(Number(e.target.value))}
-                          className="input w-full"
-                        />
-                      </div>
-                      <div>
-                        <label className="label">Ideal shifts</label>
-                        <input
-                          type="number"
-                          min={1}
-                          max={31}
-                          value={targetShifts}
-                          onChange={(e) => setTargetShifts(Number(e.target.value))}
-                          className="input w-full"
-                        />
-                      </div>
-                      <div>
-                        <label className="label">Maximum shifts</label>
-                        <input
-                          type="number"
-                          min={1}
-                          max={31}
-                          value={maxShifts}
-                          onChange={(e) => setMaxShifts(Number(e.target.value))}
-                          className="input w-full"
-                        />
-                      </div>
-                    </div>
-                    <p className="text-xs text-slate-400">
-                      {(session.user as any).prefersTwelveHour
-                        ? "Each 12h shift counts as one shift."
-                        : "Each 24h shift counts as one shift."}
+                  )}
+                </div>
+
+                {/* Recurring Preferences */}
+                <div className="card space-y-4">
+                  <div>
+                    <h3 className="font-semibold text-slate-700">Recurring Preferences</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Set day-of-week patterns that carry over every month. Click a day to cycle: gray = no pattern, red = required off, amber = preferred off, green = always available.
                     </p>
                   </div>
-                )}
+                  <RecurringDayPicker
+                    prefs={recurringPrefs as any}
+                    onChange={(p) => saveRecurringPrefs(p)}
+                    showAvailable={true}
+                    disabled={recurringLoading}
+                  />
+                  <div className="flex items-center gap-3">
+                    {recurringSaved && <span className="text-xs text-green-700">Saved ✓</span>}
+                    {recurringLoading && <span className="text-xs text-slate-500">Saving…</span>}
+                    {selectedId && recurringPrefs.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={applyRecurringToMonth}
+                        disabled={applyingRecurring}
+                        className="btn-secondary text-xs py-1.5 px-3"
+                      >
+                        {applyingRecurring ? "Applying…" : `Apply to ${selectedPeriod ? MONTH_NAMES[selectedPeriod.month] : "this month"}`}
+                      </button>
+                    )}
+                    {applyMsg && <span className="text-xs text-green-700">{applyMsg}</span>}
+                  </div>
+                </div>
 
                 {/* Blocked dates */}
                 <div className="card space-y-3">
@@ -375,9 +506,10 @@ function PreferencesInner() {
 
                 {/* Preferred dates */}
                 <div className="card space-y-3">
-                  <h3 className="font-semibold text-slate-700">Shifts I Want to Work</h3>
+                  <h3 className="font-semibold text-slate-700">Shifts I Can Work</h3>
                   <p className="text-xs text-slate-500">
-                    Tap a date to request it. The scheduler will prioritize these days.
+                    Tap the days you <strong>are available</strong> to work.
+                    If you mark any days, the scheduler will <strong>only assign you on those days</strong> — leave this blank to remain available all month.
                     Auto-saves as you edit.
                   </p>
                   <PreferredCalendar
@@ -403,26 +535,38 @@ function PreferencesInner() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center gap-3 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={handleSaveDraft}
-                    disabled={saving}
-                    className="btn-secondary text-sm"
-                  >
-                    Save Draft
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submitting || submitted}
-                    className="btn-primary text-sm"
-                  >
-                    {submitted   ? "✅ Submitted" :
-                     submitting  ? "Submitting…" :
-                                   "Submit Preferences"}
-                  </button>
-                  {saved && !submitting && (
-                    <span className="text-sm text-green-700">Saved ✓</span>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={handleSaveDraft}
+                      disabled={saving}
+                      className="btn-secondary text-sm"
+                    >
+                      {saving ? "Saving…" : "Save Draft"}
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="btn-primary text-sm"
+                    >
+                      {submitting ? "Submitting…" :
+                       submitted  ? "Update Submission" :
+                                    "Submit Preferences"}
+                    </button>
+                    {saved && !submitting && (
+                      <span className="text-sm text-green-700">Saved ✓</span>
+                    )}
+                  </div>
+                  {saveError && (
+                    <div className="rounded-lg bg-red-50 ring-1 ring-red-200 px-3 py-2 text-sm text-red-700">
+                      ⚠️ {saveError}
+                    </div>
+                  )}
+                  {submitError && (
+                    <div className="rounded-lg bg-red-50 ring-1 ring-red-200 px-3 py-2 text-sm text-red-700">
+                      ⚠️ {submitError}
+                    </div>
                   )}
                 </div>
               </form>

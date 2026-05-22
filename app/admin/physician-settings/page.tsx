@@ -1,10 +1,14 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import NavBar from "@/components/NavBar"
 import Link from "next/link"
+import RecurringDayPicker from "@/components/RecurringDayPicker"
+
+const ALL_SHIFT_TYPES = ["24H", "DAY12", "NIGHT12"] as const
+const SHIFT_LABEL: Record<string, string> = { "24H": "24H", "DAY12": "Day", "NIGHT12": "Night" }
 
 interface PhysicianRow {
   id:                string
@@ -14,7 +18,7 @@ interface PhysicianRow {
   prefersTwelveHour: boolean
   adminTargetShifts: number | null
   adminHardCap:      boolean
-  useHoursTarget:    boolean
+  allowedShiftTypes: string
   // loaded separately per period
   minShifts?:        number | null
   targetShifts?:     number | null
@@ -42,7 +46,11 @@ export default function PhysicianSettingsPage() {
   const [loading, setLoading]       = useState(true)
 
   // Local edit state per physician
-  const [edits, setEdits] = useState<Record<string, { adminTargetShifts: string; adminHardCap: boolean; prefersTwelveHour: boolean; useHoursTarget: boolean }>>({})
+  const [edits, setEdits] = useState<Record<string, { adminTargetShifts: string; adminHardCap: boolean; prefersTwelveHour: boolean; allowedShiftTypes: string }>>({})
+
+  // Recurring preferences expand state
+  const [expandedRecurring, setExpandedRecurring] = useState<Record<string, boolean>>({})
+  const [physicianRecurringPrefs, setPhysicianRecurringPrefs] = useState<Record<string, { dow: number; blockType: string }[]>>({})
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login")
@@ -62,7 +70,7 @@ export default function PhysicianSettingsPage() {
           adminTargetShifts: d.adminTargetShifts != null ? String(d.adminTargetShifts) : "",
           adminHardCap:      d.adminHardCap,
           prefersTwelveHour: d.prefersTwelveHour,
-          useHoursTarget:    d.useHoursTarget,
+          allowedShiftTypes: d.allowedShiftTypes ?? "ALL",
         }
       }
       setEdits(initialEdits)
@@ -101,7 +109,18 @@ export default function PhysicianSettingsPage() {
       .catch(() => {/* preferences endpoint may not exist yet */})
   }, [selectedPeriodId, physicians.length])
 
-  function setEdit(userId: string, field: "adminTargetShifts" | "adminHardCap" | "prefersTwelveHour" | "useHoursTarget", value: string | boolean) {
+  function toggleAllowedShift(userId: string, shiftType: string) {
+    const current = (edits[userId]?.allowedShiftTypes ?? "ALL")
+    const active = current === "ALL" ? [...ALL_SHIFT_TYPES] : current.split(",").map((s) => s.trim())
+    const next = active.includes(shiftType)
+      ? active.filter((s) => s !== shiftType)
+      : [...active, shiftType]
+    // If all three are selected, store as "ALL"
+    const val = next.length === 0 ? "ALL" : next.sort().join(",") === "24H,DAY12,NIGHT12" ? "ALL" : next.join(",")
+    setEdits((prev) => ({ ...prev, [userId]: { ...prev[userId], allowedShiftTypes: val } }))
+  }
+
+  function setEdit(userId: string, field: "adminTargetShifts" | "adminHardCap" | "prefersTwelveHour", value: string | boolean) {
     setEdits((prev) => ({ ...prev, [userId]: { ...prev[userId], [field]: value } }))
   }
 
@@ -117,12 +136,31 @@ export default function PhysicianSettingsPage() {
         adminTargetShifts,
         adminHardCap:      edit.adminHardCap,
         prefersTwelveHour: edit.prefersTwelveHour,
-        useHoursTarget:    edit.useHoursTarget,
+        allowedShiftTypes: edit.allowedShiftTypes ?? "ALL",
       }),
     })
     setSaving((prev) => ({ ...prev, [userId]: false }))
     setSaved((prev) => ({ ...prev, [userId]: true }))
     setTimeout(() => setSaved((prev) => ({ ...prev, [userId]: false })), 2000)
+  }
+
+  async function toggleRecurringExpand(userId: string) {
+    const isExpanded = expandedRecurring[userId] ?? false
+    setExpandedRecurring((prev) => ({ ...prev, [userId]: !isExpanded }))
+    if (!isExpanded && !(userId in physicianRecurringPrefs)) {
+      const res = await fetch(`/api/recurring-preferences?userId=${userId}`)
+      const data = await res.json()
+      setPhysicianRecurringPrefs((prev) => ({ ...prev, [userId]: data.prefs ?? [] }))
+    }
+  }
+
+  async function savePhysicianRecurring(userId: string, prefs: { dow: number; blockType: string }[]) {
+    setPhysicianRecurringPrefs((prev) => ({ ...prev, [userId]: prefs }))
+    await fetch("/api/recurring-preferences", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, prefs }),
+    })
   }
 
   if (status === "loading" || !session || loading) return null
@@ -178,7 +216,7 @@ export default function PhysicianSettingsPage() {
                 <th className="px-4 py-3 font-medium">Admin Target</th>
                 <th className="px-4 py-3 font-medium">Hard Cap</th>
                 <th className="px-4 py-3 font-medium">Shift Length</th>
-                <th className="px-4 py-3 font-medium" title="Use hours for physicians who mix 24h and 12h shifts">Track By</th>
+                <th className="px-4 py-3 font-medium" title="Which shift types this physician can be scheduled for">Allowed Shifts</th>
                 <th className="px-4 py-3 font-medium text-slate-400">
                   Physician Request (min / ideal / max)
                 </th>
@@ -187,11 +225,13 @@ export default function PhysicianSettingsPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {physicians.map((doc) => {
-                const edit = edits[doc.id] ?? { adminTargetShifts: "", adminHardCap: false, prefersTwelveHour: false, useHoursTarget: false }
+                const edit = edits[doc.id] ?? { adminTargetShifts: "", adminHardCap: false, prefersTwelveHour: false, allowedShiftTypes: "ALL" }
+                const activeShifts = edit.allowedShiftTypes === "ALL" ? [...ALL_SHIFT_TYPES] : edit.allowedShiftTypes.split(",").map((s) => s.trim())
                 const isSaving = saving[doc.id] ?? false
                 const isSaved  = saved[doc.id]  ?? false
                 return (
-                  <tr key={doc.id} className="hover:bg-slate-50 transition-colors">
+                  <React.Fragment key={doc.id}>
+                  <tr className="hover:bg-slate-50 transition-colors">
                     <td className="px-4 py-3">
                       <div className="font-medium text-slate-800">{doc.name}</div>
                       <div className="text-xs text-slate-400">
@@ -238,21 +278,30 @@ export default function PhysicianSettingsPage() {
                         {edit.prefersTwelveHour ? "12h shifts" : "24h shifts"}
                       </button>
                     </td>
-                    {/* Track by toggle */}
+                    {/* Allowed shift types */}
                     <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        onClick={() => setEdit(doc.id, "useHoursTarget", !edit.useHoursTarget)}
-                        className={`px-3 py-1 rounded-full text-xs font-semibold ring-1 transition ${
-                          edit.useHoursTarget
-                            ? "bg-purple-100 text-purple-700 ring-purple-300 hover:bg-purple-200"
-                            : "bg-slate-100 text-slate-600 ring-slate-300 hover:bg-slate-200"
-                        }`}
-                        title="Use 'Hours' for physicians who mix 24h and 12h shifts"
-                        aria-label={`Track by mode for ${doc.name}`}
-                      >
-                        {edit.useHoursTarget ? "Hours" : "Shifts"}
-                      </button>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {ALL_SHIFT_TYPES.map((st) => {
+                          const on = activeShifts.includes(st)
+                          return (
+                            <button
+                              key={st}
+                              type="button"
+                              onClick={() => toggleAllowedShift(doc.id, st)}
+                              className={`px-2 py-0.5 rounded text-xs font-semibold ring-1 transition ${
+                                on
+                                  ? st === "24H"    ? "bg-blue-100 text-blue-800 ring-blue-300"
+                                  : st === "DAY12"  ? "bg-amber-100 text-amber-800 ring-amber-300"
+                                  :                   "bg-indigo-100 text-indigo-800 ring-indigo-300"
+                                  : "bg-white text-slate-300 ring-slate-200"
+                              }`}
+                              title={on ? `Remove ${SHIFT_LABEL[st]}` : `Allow ${SHIFT_LABEL[st]}`}
+                            >
+                              {SHIFT_LABEL[st]}
+                            </button>
+                          )
+                        })}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-slate-500">
                       {doc.targetShifts != null ? (
@@ -264,16 +313,44 @@ export default function PhysicianSettingsPage() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        onClick={() => handleSave(doc.id)}
-                        disabled={isSaving}
-                        className="btn-primary text-xs py-1.5 px-3"
-                      >
-                        {isSaving ? "Saving…" : isSaved ? "Saved ✓" : "Save"}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleRecurringExpand(doc.id)}
+                          className={`text-xs py-1.5 px-3 rounded-lg ring-1 transition font-medium ${
+                            expandedRecurring[doc.id]
+                              ? "bg-blue-100 text-blue-700 ring-blue-300"
+                              : "bg-white text-slate-600 ring-slate-200 hover:ring-blue-300"
+                          }`}
+                          title="View/edit recurring day preferences"
+                        >
+                          Recurring
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSave(doc.id)}
+                          disabled={isSaving}
+                          className="btn-primary text-xs py-1.5 px-3"
+                        >
+                          {isSaving ? "Saving…" : isSaved ? "Saved ✓" : "Save"}
+                        </button>
+                      </div>
                     </td>
                   </tr>
+                  {expandedRecurring[doc.id] && (
+                    <tr key={`recur-${doc.id}`}>
+                      <td colSpan={7} className="px-4 pb-4 pt-0">
+                        <div className="bg-slate-50 rounded-xl p-4 space-y-3">
+                          <p className="text-xs font-semibold text-slate-600">Recurring Day Preferences for {doc.name}</p>
+                          <RecurringDayPicker
+                            prefs={(physicianRecurringPrefs[doc.id] ?? []) as any}
+                            onChange={(p) => savePhysicianRecurring(doc.id, p)}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 )
               })}
               {physicians.length === 0 && (
@@ -291,7 +368,7 @@ export default function PhysicianSettingsPage() {
           <p><strong>Admin Target:</strong> Overrides the physician&apos;s ideal shift count during scheduling. Leave blank to use the physician&apos;s own request.</p>
           <p><strong>Hard Cap:</strong> When checked, the scheduler will never assign more shifts than the admin target. When unchecked, the admin target is used for scoring only (soft guidance).</p>
           <p><strong>Shift Length:</strong> Sets whether the physician prefers 12-hour (day/night) or 24-hour shifts. Click the button to toggle, then click Save.</p>
-          <p><strong>Track By:</strong> Use &ldquo;Hours&rdquo; for physicians who work both 24h and 12h shifts so targets are expressed in total hours rather than shift counts (eliminates ambiguity — &ldquo;3 shifts&rdquo; could mean 72h or 36h). The physician will enter hour targets in their preferences page when this is enabled.</p>
+          <p><strong>Allowed Shifts:</strong> Click shift type buttons to toggle. Lit = allowed, grey = excluded. When a type is excluded, the scheduler will never assign that shift type to this physician. Physicians can also set their own preference from their preferences page.</p>
         </div>
       </main>
     </div>

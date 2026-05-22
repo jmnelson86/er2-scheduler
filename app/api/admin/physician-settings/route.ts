@@ -21,7 +21,7 @@ export async function GET() {
       prefersTwelveHour: true,
       adminTargetShifts: true,
       adminHardCap:      true,
-      useHoursTarget:    true,
+      allowedShiftTypes: true,
     },
   })
 
@@ -37,7 +37,7 @@ export async function PATCH(req: NextRequest) {
     return Response.json({ error: "Unauthorized" }, { status: 401 })
 
   const body = await req.json()
-  const { userId, adminTargetShifts, adminHardCap, prefersTwelveHour, useHoursTarget } = body
+  const { userId, adminTargetShifts, adminHardCap, prefersTwelveHour, allowedShiftTypes } = body
 
   if (!userId) return Response.json({ error: "userId required" }, { status: 400 })
 
@@ -56,8 +56,8 @@ export async function PATCH(req: NextRequest) {
     data.prefersTwelveHour = Boolean(prefersTwelveHour)
   }
 
-  if (useHoursTarget !== undefined) {
-    data.useHoursTarget = Boolean(useHoursTarget)
+  if (allowedShiftTypes !== undefined) {
+    data.allowedShiftTypes = String(allowedShiftTypes)
   }
 
   if (Object.keys(data).length === 0) {
@@ -75,7 +75,7 @@ export async function PATCH(req: NextRequest) {
       prefersTwelveHour: true,
       adminTargetShifts: true,
       adminHardCap:      true,
-      useHoursTarget:    true,
+      allowedShiftTypes: true,
     },
   })
 

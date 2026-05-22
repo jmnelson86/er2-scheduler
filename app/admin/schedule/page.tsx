@@ -78,7 +78,7 @@ function ScheduleInner() {
     const data = await res.json()
     if (res.ok) {
       setAssignments(data.assignments ?? [])
-      setPeriod((prev) => prev ? { ...prev, status: "GENERATING" } : prev)
+      setPeriod((prev) => prev ? { ...prev, status: "DRAFT" } : prev)
       setMsg(`Generated ${data.assignments?.length ?? 0} assignments`)
     } else {
       setMsg(data.error ?? "Generation failed")
@@ -106,10 +106,30 @@ function ScheduleInner() {
     const res = await fetch("/api/admin/schedule", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ periodId, status: "GENERATING" }),
+      body: JSON.stringify({ periodId, status: "DRAFT" }),
     })
-    if (res.ok) setPeriod((prev) => prev ? { ...prev, status: "GENERATING" } : prev)
+    if (res.ok) setPeriod((prev) => prev ? { ...prev, status: "DRAFT" } : prev)
     setPublishing(false)
+  }
+
+  async function reopenForPreferences() {
+    if (!periodId) return
+    if (!confirm("Reopen this period so physicians can update their preferences? The current draft schedule will be cleared.")) return
+    setClearing(true)
+    // Clear assignments first
+    await fetch(`/api/admin/schedule?periodId=${periodId}`, { method: "DELETE" })
+    // Set status back to OPEN
+    const res = await fetch("/api/admin/schedule", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ periodId, status: "OPEN" }),
+    })
+    if (res.ok) {
+      setAssignments([])
+      setPeriod((prev) => prev ? { ...prev, status: "OPEN" } : prev)
+      setMsg("Period reopened — physicians can now update preferences.")
+    }
+    setClearing(false)
   }
 
   async function clearSchedule() {
@@ -151,6 +171,34 @@ function ScheduleInner() {
       setAssignments((prev) =>
         prev.map((x) => x.id === assignmentId ? { ...x, isLocked: !a.isLocked } : x)
       )
+    }
+  }
+
+  async function handleSplit(assignmentId: string) {
+    const res = await fetch("/api/admin/schedule", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "split", assignmentId }),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      setAssignments((prev) => [
+        ...prev.filter((a) => a.id !== data.removed),
+        ...data.added,
+      ])
+    }
+  }
+
+  async function handleAddSlot(date: string, shiftType: "DAY12" | "NIGHT12") {
+    if (!periodId) return
+    const res = await fetch("/api/admin/schedule", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "add", periodId, date, shiftType }),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      setAssignments((prev) => [...prev, data.assignment])
     }
   }
 
@@ -245,6 +293,17 @@ function ScheduleInner() {
                   </button>
                 )}
 
+                {(period.status === "DRAFT" || period.status === "GENERATING") && (
+                  <button
+                    onClick={reopenForPreferences}
+                    disabled={clearing}
+                    className="btn-secondary text-sm"
+                    title="Clear the draft schedule and reopen the period so physicians can submit preferences"
+                  >
+                    ↩ Reopen for Preferences
+                  </button>
+                )}
+
                 {msg && (
                   <span className={`text-sm ${msg.includes("fail") || msg.includes("error") ? "text-red-600" : "text-green-700"}`}>
                     {msg}
@@ -278,6 +337,8 @@ function ScheduleInner() {
                   physicians={physicians}
                   onReassign={handleReassign}
                   onToggleLock={handleToggleLock}
+                  onSplit={period.status !== "PUBLISHED" ? handleSplit : undefined}
+                  onAddSlot={period.status !== "PUBLISHED" ? handleAddSlot : undefined}
                 />
               </div>
             ) : (

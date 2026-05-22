@@ -9,7 +9,6 @@ declare module "next-auth" {
       role: string
       isPRN: boolean
       prefersTwelveHour: boolean
-      useHoursTarget: boolean
       username: string
       color: string
     }
