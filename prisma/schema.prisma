@@ -12,6 +12,7 @@ model User {
   username          String   @unique
   password          String
   role              String   @default("PHYSICIAN")   // "ADMIN" | "PHYSICIAN"
+  email             String?
   isPRN             Boolean  @default(false)
   prefersTwelveHour Boolean  @default(false)
   isActive          Boolean  @default(true)

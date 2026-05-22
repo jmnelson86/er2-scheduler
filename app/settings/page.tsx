@@ -15,6 +15,7 @@ const COLOR_PALETTE = [
 interface Settings {
   name: string
   username: string
+  email: string | null
   color: string
   prefersTwelveHour: boolean
 }
@@ -27,6 +28,22 @@ export default function SettingsPage() {
   const [selected, setSelected]   = useState<string>("#6366f1")
   const [saving,   setSaving]     = useState(false)
   const [msg,      setMsg]        = useState("")
+  const [email,    setEmail]      = useState("")
+  const [emailSaving, setEmailSaving] = useState(false)
+  const [emailMsg,    setEmailMsg]    = useState("")
+
+  async function handleEmailSave() {
+    setEmailSaving(true); setEmailMsg("")
+    const res = await fetch("/api/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email.trim() || null }),
+    })
+    setEmailSaving(false)
+    setEmailMsg(res.ok ? "Email saved!" : "Failed to save.")
+    if (res.ok) setSettings((prev) => prev ? { ...prev, email: email.trim() || null } : prev)
+    setTimeout(() => setEmailMsg(""), 3000)
+  }
 
   const [currentPw,  setCurrentPw]  = useState("")
   const [newPw,      setNewPw]      = useState("")
@@ -68,6 +85,7 @@ export default function SettingsPage() {
       .then((data: Settings) => {
         setSettings(data)
         setSelected(data.color ?? "#6366f1")
+        setEmail(data.email ?? "")
       })
   }, [status])
 
@@ -110,6 +128,32 @@ export default function SettingsPage() {
               <p className="font-medium text-slate-800">{settings.username}</p>
             </div>
           </div>
+        </div>
+
+        {/* Email */}
+        <div className="card space-y-3">
+          <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Notification Email</h2>
+          <p className="text-xs text-slate-500">Receive emails when shifts are offered and when the schedule is published.</p>
+          <div className="flex items-center gap-2">
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleEmailSave()}
+              className="input flex-1"
+              placeholder="your@email.com"
+            />
+            <button
+              onClick={handleEmailSave}
+              disabled={emailSaving}
+              className="btn-primary text-sm shrink-0"
+            >
+              {emailSaving ? "Saving…" : "Save"}
+            </button>
+          </div>
+          {emailMsg && (
+            <p className={`text-xs ${emailMsg.includes("Failed") ? "text-red-600" : "text-green-700"}`}>{emailMsg}</p>
+          )}
         </div>
 
         {/* My Color */}

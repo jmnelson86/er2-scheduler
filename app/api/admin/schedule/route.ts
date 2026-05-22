@@ -117,6 +117,26 @@ export async function PATCH(req: NextRequest) {
     where: { id: periodId },
     data:  { status },
   })
+
+  // Send publish notifications
+  if (status === "PUBLISHED") {
+    const { sendSchedulePublishedEmail } = await import("@/lib/email")
+    const users = await prisma.user.findMany({
+      where: { isActive: true, email: { not: null } },
+      select: { email: true, name: true },
+    })
+    for (const u of users) {
+      if (u.email) {
+        sendSchedulePublishedEmail({
+          toEmail: u.email,
+          toName: u.name,
+          month: period.month,
+          year: period.year,
+        }).catch(console.error)
+      }
+    }
+  }
+
   return Response.json({ period })
 }
 

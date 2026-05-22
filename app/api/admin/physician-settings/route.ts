@@ -18,6 +18,7 @@ export async function GET() {
       id:                true,
       name:              true,
       username:          true,
+      email:             true,
       isPRN:             true,
       prefersTwelveHour: true,
       adminTargetShifts: true,
@@ -38,7 +39,7 @@ export async function PATCH(req: NextRequest) {
     return Response.json({ error: "Unauthorized" }, { status: 401 })
 
   const body = await req.json()
-  const { userId, adminTargetShifts, adminHardCap, prefersTwelveHour, allowedShiftTypes, newPassword } = body
+  const { userId, adminTargetShifts, adminHardCap, prefersTwelveHour, allowedShiftTypes, newPassword, email } = body
 
   if (!userId) return Response.json({ error: "userId required" }, { status: 400 })
 
@@ -59,6 +60,10 @@ export async function PATCH(req: NextRequest) {
 
   if (allowedShiftTypes !== undefined) {
     data.allowedShiftTypes = String(allowedShiftTypes)
+  }
+
+  if (email !== undefined) {
+    data.email = email ? String(email).toLowerCase().trim() : null
   }
 
   if (newPassword !== undefined) {

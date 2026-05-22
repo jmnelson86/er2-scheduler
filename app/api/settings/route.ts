@@ -16,7 +16,7 @@ export async function GET() {
 
   const user = await prisma.user.findUnique({
     where:  { id: (session.user as any).id },
-    select: { id: true, name: true, username: true, color: true, prefersTwelveHour: true, allowedShiftTypes: true },
+    select: { id: true, name: true, username: true, email: true, color: true, prefersTwelveHour: true, allowedShiftTypes: true },
   })
   if (!user) return Response.json({ error: "User not found" }, { status: 404 })
 
@@ -28,7 +28,7 @@ export async function PATCH(req: NextRequest) {
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 })
 
   const body = await req.json()
-  const { color, allowedShiftTypes } = body
+  const { color, allowedShiftTypes, email } = body
   const data: Record<string, unknown> = {}
 
   if (color !== undefined) {
@@ -40,6 +40,10 @@ export async function PATCH(req: NextRequest) {
 
   if (allowedShiftTypes !== undefined) {
     data.allowedShiftTypes = String(allowedShiftTypes)
+  }
+
+  if (email !== undefined) {
+    data.email = email ? String(email).toLowerCase().trim() : null
   }
 
   if (Object.keys(data).length > 0) {

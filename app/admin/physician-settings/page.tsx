@@ -14,6 +14,7 @@ interface PhysicianRow {
   id:                string
   name:              string
   username:          string
+  email:             string | null
   isPRN:             boolean
   prefersTwelveHour: boolean
   adminTargetShifts: number | null
@@ -46,7 +47,7 @@ export default function PhysicianSettingsPage() {
   const [loading, setLoading]       = useState(true)
 
   // Local edit state per physician
-  const [edits, setEdits] = useState<Record<string, { adminTargetShifts: string; adminHardCap: boolean; prefersTwelveHour: boolean; allowedShiftTypes: string }>>({})
+  const [edits, setEdits] = useState<Record<string, { adminTargetShifts: string; adminHardCap: boolean; prefersTwelveHour: boolean; allowedShiftTypes: string; email: string }>>({})
 
   // Recurring preferences expand state
   const [expandedRecurring, setExpandedRecurring] = useState<Record<string, boolean>>({})
@@ -75,6 +76,7 @@ export default function PhysicianSettingsPage() {
           adminHardCap:      d.adminHardCap,
           prefersTwelveHour: d.prefersTwelveHour,
           allowedShiftTypes: d.allowedShiftTypes ?? "ALL",
+          email:             d.email ?? "",
         }
       }
       setEdits(initialEdits)
@@ -124,7 +126,7 @@ export default function PhysicianSettingsPage() {
     setEdits((prev) => ({ ...prev, [userId]: { ...prev[userId], allowedShiftTypes: val } }))
   }
 
-  function setEdit(userId: string, field: "adminTargetShifts" | "adminHardCap" | "prefersTwelveHour", value: string | boolean) {
+  function setEdit(userId: string, field: "adminTargetShifts" | "adminHardCap" | "prefersTwelveHour" | "email", value: string | boolean) {
     setEdits((prev) => ({ ...prev, [userId]: { ...prev[userId], [field]: value } }))
   }
 
@@ -141,6 +143,7 @@ export default function PhysicianSettingsPage() {
         adminHardCap:      edit.adminHardCap,
         prefersTwelveHour: edit.prefersTwelveHour,
         allowedShiftTypes: edit.allowedShiftTypes ?? "ALL",
+        email:             edit.email.trim() || null,
       }),
     })
     setSaving((prev) => ({ ...prev, [userId]: false }))
@@ -260,9 +263,16 @@ export default function PhysicianSettingsPage() {
                   <tr className="hover:bg-slate-50 transition-colors">
                     <td className="px-4 py-3">
                       <div className="font-medium text-slate-800">{doc.name}</div>
-                      <div className="text-xs text-slate-400">
+                      <div className="text-xs text-slate-400 mb-1">
                         @{doc.username}{doc.isPRN ? " · PRN" : ""}
                       </div>
+                      <input
+                        type="email"
+                        placeholder="email (optional)"
+                        value={edit.email}
+                        onChange={(e) => setEdit(doc.id, "email", e.target.value)}
+                        className="input text-xs py-0.5 px-2 w-44"
+                      />
                     </td>
                     <td className="px-4 py-3">
                       <input

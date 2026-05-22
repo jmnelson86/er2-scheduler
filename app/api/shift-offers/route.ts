@@ -2,6 +2,7 @@ import { NextRequest } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/db"
+import { sendShiftOfferEmail } from "@/lib/email"
 
 // GET /api/shift-offers
 // Returns offers relevant to current user:
@@ -117,6 +118,39 @@ export async function POST(req: NextRequest) {
       targetAssignment: true,
     },
   })
+
+  // Send email notification (fire and forget — don't block response)
+  if (offer.type === "TRADE" && offer.targetUser) {
+    const target = await prisma.user.findUnique({ where: { id: offer.targetUserId! }, select: { email: true } })
+    if (target?.email) {
+      sendShiftOfferEmail({
+        toEmail: target.email,
+        toName: offer.targetUser.name,
+        offeringName: offer.offeringUser.name,
+        date: offer.assignment.date,
+        shiftType: offer.assignment.shiftType,
+        offerType: "TRADE",
+      }).catch(console.error)
+    }
+  } else if (offer.type === "PICKUP") {
+    // Notify all physicians with emails about the open pickup
+    const physicians = await prisma.user.findMany({
+      where: { role: "PHYSICIAN", isActive: true, email: { not: null }, id: { not: offer.offeringUserId } },
+      select: { email: true, name: true },
+    })
+    for (const p of physicians) {
+      if (p.email) {
+        sendShiftOfferEmail({
+          toEmail: p.email,
+          toName: p.name,
+          offeringName: offer.offeringUser.name,
+          date: offer.assignment.date,
+          shiftType: offer.assignment.shiftType,
+          offerType: "PICKUP",
+        }).catch(console.error)
+      }
+    }
+  }
 
   return Response.json({ offer }, { status: 201 })
 }
