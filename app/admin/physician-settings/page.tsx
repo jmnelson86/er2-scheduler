@@ -52,6 +52,10 @@ export default function PhysicianSettingsPage() {
   const [expandedRecurring, setExpandedRecurring] = useState<Record<string, boolean>>({})
   const [physicianRecurringPrefs, setPhysicianRecurringPrefs] = useState<Record<string, { dow: number; blockType: string }[]>>({})
 
+  const [resetPwOpen,  setResetPwOpen]  = useState<Record<string, boolean>>({})
+  const [resetPwValue, setResetPwValue] = useState<Record<string, string>>({})
+  const [resetPwMsg,   setResetPwMsg]   = useState<Record<string, string>>({})
+
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login")
     if (status === "authenticated" && session?.user?.role !== "ADMIN") router.push("/dashboard")
@@ -161,6 +165,28 @@ export default function PhysicianSettingsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, prefs }),
     })
+  }
+
+  async function handleResetPassword(userId: string) {
+    const pw = resetPwValue[userId] ?? ""
+    if (pw.length < 6) {
+      setResetPwMsg((prev) => ({ ...prev, [userId]: "Min 6 characters" }))
+      return
+    }
+    const res = await fetch("/api/admin/physician-settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, newPassword: pw }),
+    })
+    if (res.ok) {
+      setResetPwMsg((prev) => ({ ...prev, [userId]: "Password reset!" }))
+      setResetPwValue((prev) => ({ ...prev, [userId]: "" }))
+      setResetPwOpen((prev) => ({ ...prev, [userId]: false }))
+    } else {
+      const data = await res.json()
+      setResetPwMsg((prev) => ({ ...prev, [userId]: data.error ?? "Failed" }))
+    }
+    setTimeout(() => setResetPwMsg((prev) => ({ ...prev, [userId]: "" })), 3000)
   }
 
   if (status === "loading" || !session || loading) return null
@@ -313,7 +339,7 @@ export default function PhysicianSettingsPage() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <button
                           type="button"
                           onClick={() => toggleRecurringExpand(doc.id)}
@@ -334,7 +360,45 @@ export default function PhysicianSettingsPage() {
                         >
                           {isSaving ? "Saving…" : isSaved ? "Saved ✓" : "Save"}
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => setResetPwOpen((prev) => ({ ...prev, [doc.id]: !prev[doc.id] }))}
+                          className="text-xs py-1.5 px-3 rounded-lg ring-1 bg-white text-slate-600 ring-slate-200 hover:ring-red-300 hover:text-red-600 transition font-medium"
+                        >
+                          Reset Pwd
+                        </button>
+                        {resetPwMsg[doc.id] && (
+                          <span className={`text-xs ${resetPwMsg[doc.id].includes("!") ? "text-green-700" : "text-red-600"}`}>
+                            {resetPwMsg[doc.id]}
+                          </span>
+                        )}
                       </div>
+                      {resetPwOpen[doc.id] && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <input
+                            type="password"
+                            placeholder="New password"
+                            value={resetPwValue[doc.id] ?? ""}
+                            onChange={(e) => setResetPwValue((prev) => ({ ...prev, [doc.id]: e.target.value }))}
+                            className="input text-xs py-1 px-2 w-36"
+                            onKeyDown={(e) => e.key === "Enter" && handleResetPassword(doc.id)}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleResetPassword(doc.id)}
+                            className="text-xs py-1 px-2.5 rounded-lg bg-red-600 text-white hover:bg-red-700 transition font-medium"
+                          >
+                            Set
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setResetPwOpen((prev) => ({ ...prev, [doc.id]: false }))}
+                            className="text-xs text-slate-400 hover:text-slate-600"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                   {expandedRecurring[doc.id] && (

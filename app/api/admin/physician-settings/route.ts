@@ -2,6 +2,7 @@ import { NextRequest } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/db"
+import bcrypt from "bcryptjs"
 
 // GET /api/admin/physician-settings
 // Returns all active physicians with their admin-managed settings.
@@ -37,7 +38,7 @@ export async function PATCH(req: NextRequest) {
     return Response.json({ error: "Unauthorized" }, { status: 401 })
 
   const body = await req.json()
-  const { userId, adminTargetShifts, adminHardCap, prefersTwelveHour, allowedShiftTypes } = body
+  const { userId, adminTargetShifts, adminHardCap, prefersTwelveHour, allowedShiftTypes, newPassword } = body
 
   if (!userId) return Response.json({ error: "userId required" }, { status: 400 })
 
@@ -58,6 +59,12 @@ export async function PATCH(req: NextRequest) {
 
   if (allowedShiftTypes !== undefined) {
     data.allowedShiftTypes = String(allowedShiftTypes)
+  }
+
+  if (newPassword !== undefined) {
+    if (String(newPassword).length < 6)
+      return Response.json({ error: "Password must be at least 6 characters" }, { status: 400 })
+    data.password = await bcrypt.hash(String(newPassword), 10)
   }
 
   if (Object.keys(data).length === 0) {

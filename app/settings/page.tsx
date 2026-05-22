@@ -28,6 +28,35 @@ export default function SettingsPage() {
   const [saving,   setSaving]     = useState(false)
   const [msg,      setMsg]        = useState("")
 
+  const [currentPw,  setCurrentPw]  = useState("")
+  const [newPw,      setNewPw]      = useState("")
+  const [confirmPw,  setConfirmPw]  = useState("")
+  const [pwSaving,   setPwSaving]   = useState(false)
+  const [pwMsg,      setPwMsg]      = useState("")
+  const [pwError,    setPwError]    = useState("")
+
+  async function handlePasswordChange() {
+    setPwMsg(""); setPwError("")
+    if (!currentPw || !newPw || !confirmPw) { setPwError("All fields are required."); return }
+    if (newPw !== confirmPw) { setPwError("New passwords do not match."); return }
+    if (newPw.length < 6) { setPwError("New password must be at least 6 characters."); return }
+    setPwSaving(true)
+    const res = await fetch("/api/account/password", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ currentPassword: currentPw, newPassword: newPw }),
+    })
+    setPwSaving(false)
+    if (res.ok) {
+      setPwMsg("Password changed successfully!")
+      setCurrentPw(""); setNewPw(""); setConfirmPw("")
+    } else {
+      const data = await res.json()
+      setPwError(data.error ?? "Failed to change password.")
+    }
+    setTimeout(() => { setPwMsg(""); setPwError("") }, 4000)
+  }
+
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login")
   }, [status, router])
@@ -145,6 +174,55 @@ export default function SettingsPage() {
             </p>
           </div>
           <p className="text-xs text-slate-400">Contact an admin to change your shift preference.</p>
+        </div>
+
+        {/* Change Password */}
+        <div className="card space-y-4">
+          <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Change Password</h2>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Current Password</label>
+              <input
+                type="password"
+                value={currentPw}
+                onChange={(e) => setCurrentPw(e.target.value)}
+                className="input w-full"
+                placeholder="Enter current password"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">New Password</label>
+              <input
+                type="password"
+                value={newPw}
+                onChange={(e) => setNewPw(e.target.value)}
+                className="input w-full"
+                placeholder="At least 6 characters"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Confirm New Password</label>
+              <input
+                type="password"
+                value={confirmPw}
+                onChange={(e) => setConfirmPw(e.target.value)}
+                className="input w-full"
+                placeholder="Repeat new password"
+                onKeyDown={(e) => e.key === "Enter" && handlePasswordChange()}
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handlePasswordChange}
+              disabled={pwSaving}
+              className="btn-primary text-sm"
+            >
+              {pwSaving ? "Saving…" : "Change Password"}
+            </button>
+            {pwMsg   && <span className="text-xs text-green-700">{pwMsg}</span>}
+            {pwError && <span className="text-xs text-red-600">{pwError}</span>}
+          </div>
         </div>
       </main>
     </div>
