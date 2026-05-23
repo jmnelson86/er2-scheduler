@@ -238,7 +238,7 @@ export default function PhysicianSettingsPage() {
 
         {/* Table */}
         <div className="card overflow-x-auto p-0">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm min-w-[900px]">
             <thead>
               <tr className="border-b border-slate-100 text-left text-xs text-slate-500 uppercase tracking-wide">
                 <th className="px-4 py-3 font-medium">Physician</th>

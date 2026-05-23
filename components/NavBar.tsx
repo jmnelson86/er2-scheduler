@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
 import { useSession, signOut } from "next-auth/react"
 import { usePathname } from "next/navigation"
@@ -8,6 +9,7 @@ export default function NavBar() {
   const { data: session } = useSession()
   const pathname = usePathname()
   const isAdmin = session?.user?.role === "ADMIN"
+  const [menuOpen, setMenuOpen] = useState(false)
 
   const isActive = (href: string) => pathname.startsWith(href)
 
@@ -18,16 +20,30 @@ export default function NavBar() {
         : "text-blue-100 hover:bg-white/10 hover:text-white"
     }`
 
+  const adminLinks = [
+    { href: "/admin",              label: "Overview"     },
+    { href: "/admin/physicians",   label: "Physicians"   },
+    { href: "/admin/schedule",     label: "Schedule"     },
+    { href: "/admin/shift-offers", label: "Shift Offers" },
+  ]
+
+  const physicianLinks = [
+    { href: "/dashboard",    label: "Dashboard"    },
+    { href: "/preferences",  label: "Preferences"  },
+    { href: "/schedule",     label: "My Schedule"  },
+    { href: "/shift-offers", label: "Shift Offers" },
+    { href: "/settings",     label: "⚙ Settings"  },
+  ]
+
+  const links = isAdmin ? adminLinks : physicianLinks
+
   return (
     <nav className="shadow-lg" style={{ background: "#0d2580" }}>
-      {/* TotalCare red accent stripe */}
       <div className="h-0.5" style={{ background: "#c62828" }} />
 
       <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
-
         {/* Logo */}
         <div className="flex items-center gap-3">
-          {/* Mini TotalCare mark */}
           <div
             className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
             style={{ background: "#1565c0" }}
@@ -45,32 +61,21 @@ export default function NavBar() {
           <span className="text-blue-300 text-xs hidden md:inline">Denton</span>
         </div>
 
-        {/* Nav links */}
+        {/* Desktop nav links */}
         {session && (
-          <div className="flex items-center gap-1">
-            {isAdmin ? (
-              <>
-                <Link href="/admin"                className={linkClass("/admin")}>Overview</Link>
-                <Link href="/admin/physicians"     className={linkClass("/admin/physicians")}>Physicians</Link>
-                <Link href="/admin/schedule"       className={linkClass("/admin/schedule")}>Schedule</Link>
-                <Link href="/admin/shift-offers"   className={linkClass("/admin/shift-offers")}>Shift Offers</Link>
-              </>
-            ) : (
-              <>
-                <Link href="/dashboard"     className={linkClass("/dashboard")}>Dashboard</Link>
-                <Link href="/preferences"   className={linkClass("/preferences")}>Preferences</Link>
-                <Link href="/schedule"      className={linkClass("/schedule")}>My Schedule</Link>
-                <Link href="/shift-offers"  className={linkClass("/shift-offers")}>Shift Offers</Link>
-                <Link href="/settings"     className={linkClass("/settings")}>⚙ Settings</Link>
-              </>
-            )}
+          <div className="hidden md:flex items-center gap-1">
+            {links.map((link) => (
+              <Link key={link.href} href={link.href} className={linkClass(link.href)}>
+                {link.label}
+              </Link>
+            ))}
           </div>
         )}
 
-        {/* User / sign out */}
+        {/* Desktop user / sign out */}
         {session && (
-          <div className="flex items-center gap-3">
-            <span className="text-blue-200 text-xs hidden sm:block">
+          <div className="hidden md:flex items-center gap-3">
+            <span className="text-blue-200 text-xs">
               {session.user.name}
               {(session.user as any).isPRN && (
                 <span
@@ -89,7 +94,50 @@ export default function NavBar() {
             </button>
           </div>
         )}
+
+        {/* Mobile: sign out + hamburger */}
+        {session && (
+          <div className="flex items-center gap-1 md:hidden">
+            <button
+              onClick={() => signOut({ callbackUrl: "/login" })}
+              className="text-xs text-blue-300 hover:text-white transition px-2 py-1.5 rounded-md hover:bg-white/10"
+            >
+              Sign out
+            </button>
+            <button
+              onClick={() => setMenuOpen((o) => !o)}
+              className="p-2 rounded-lg hover:bg-white/10 transition"
+              aria-label="Toggle menu"
+            >
+              {menuOpen ? (
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              )}
+            </button>
+          </div>
+        )}
       </div>
+
+      {/* Mobile dropdown */}
+      {menuOpen && session && (
+        <div className="md:hidden border-t border-blue-900 px-4 py-3 space-y-1" style={{ background: "#0a1e6e" }}>
+          {links.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              onClick={() => setMenuOpen(false)}
+              className={`block ${linkClass(link.href)}`}
+            >
+              {link.label}
+            </Link>
+          ))}
+        </div>
+      )}
     </nav>
   )
 }
