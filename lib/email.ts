@@ -1,6 +1,11 @@
 import { Resend } from "resend"
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+// Lazy — instantiated at call time so the build succeeds without the env var
+function getResend() {
+  if (!process.env.RESEND_API_KEY) return null
+  return new Resend(process.env.RESEND_API_KEY)
+}
+
 const FROM = "TotalCare Denton Scheduler <onboarding@resend.dev>"
 
 const MONTH_NAMES = [
@@ -28,6 +33,9 @@ export async function sendShiftOfferEmail({
     ? `Shift trade request from ${offeringName}`
     : `Shift pickup offer from ${offeringName}`
   const action = offerType === "TRADE" ? "trade their shift with you" : "offer a shift for pickup"
+
+  const resend = getResend()
+  if (!resend) return
 
   await resend.emails.send({
     from: FROM,
@@ -57,6 +65,9 @@ export async function sendSchedulePublishedEmail({
   month: number
   year: number
 }) {
+  const resend = getResend()
+  if (!resend) return
+
   await resend.emails.send({
     from: FROM,
     to: toEmail,
