@@ -4,11 +4,11 @@ import { useState, useEffect } from "react"
 import { getDaysInMonth, format, startOfMonth, getDay } from "date-fns"
 
 interface Physician {
-  id:    string
-  name:  string
-  isPRN: boolean
-  prefersTwelveHour: boolean
-  color: string
+  id:              string
+  name:            string
+  isPRN:           boolean
+  shiftLengthPref: string
+  color:           string
 }
 
 interface Assignment {
@@ -204,7 +204,9 @@ export default function ScheduleGrid({
                 >
                   <span className="w-3.5 h-3.5 rounded-full shrink-0" style={{ backgroundColor: physColorMap[p.id] ?? "#6366f1" }} />
                   <span>{p.name.replace("Dr. ", "")}</span>
-                  <span className="ml-auto text-[10px] text-slate-400">{p.prefersTwelveHour ? "12h" : "24h"}</span>
+                  <span className="ml-auto text-[10px] text-slate-400">
+                    {p.shiftLengthPref === "PREFER_12H" ? "12h" : p.shiftLengthPref === "EITHER" ? "any" : "24h"}
+                  </span>
                 </button>
               ))}
             </div>

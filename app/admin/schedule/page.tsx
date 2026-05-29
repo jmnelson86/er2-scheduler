@@ -16,7 +16,7 @@ interface Period {
   id: string; month: number; year: number; status: string
 }
 interface Physician {
-  id: string; name: string; isPRN: boolean; prefersTwelveHour: boolean; color: string
+  id: string; name: string; isPRN: boolean; shiftLengthPref: string; color: string
 }
 interface Assignment {
   id: string; date: string; shiftType: string

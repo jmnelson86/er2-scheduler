@@ -9,11 +9,11 @@ interface PreferredDate {
 }
 
 interface Props {
-  year:              number
-  month:             number
-  preferred:         PreferredDate[]
-  onChange:          (dates: PreferredDate[]) => void
-  prefersTwelveHour?: boolean
+  year:             number
+  month:            number
+  preferred:        PreferredDate[]
+  onChange:         (dates: PreferredDate[]) => void
+  shiftLengthPref?: string   // "PREFER_24H" | "EITHER" | "PREFER_12H"
 }
 
 const DAY_NAMES   = ["Su","Mo","Tu","We","Th","Fr","Sa"]
@@ -28,16 +28,18 @@ interface TypeOpt {
   dot:       string
 }
 
-function getTypeOpts(prefersTwelveHour: boolean): TypeOpt[] {
-  if (prefersTwelveHour) {
+function getTypeOpts(shiftLengthPref: string): TypeOpt[] {
+  if (shiftLengthPref === "PREFER_12H" || shiftLengthPref === "EITHER") {
     return [
       { value: null,      label: "Any",           bg: "bg-green-100",  text: "text-green-800",  ring: "bg-green-100 text-green-800 ring-green-300",  dot: "bg-green-400"  },
       { value: "DAY12",   label: "Day 9AM–9PM",   bg: "bg-sky-100",    text: "text-sky-800",    ring: "bg-sky-100 text-sky-800 ring-sky-300",         dot: "bg-sky-400"    },
       { value: "NIGHT12", label: "Night 9PM–9AM", bg: "bg-indigo-100", text: "text-indigo-800", ring: "bg-indigo-100 text-indigo-800 ring-indigo-300", dot: "bg-indigo-400" },
+      { value: "24H",     label: "24H Shift",     bg: "bg-green-100",  text: "text-green-800",  ring: "bg-green-100 text-green-800 ring-green-300",  dot: "bg-green-400"  },
     ]
   }
+  // PREFER_24H (default)
   return [
-    { value: "24H", label: "24H Shift", bg: "bg-green-100", text: "text-green-800", ring: "bg-green-100 text-green-800 ring-green-300", dot: "bg-green-400" },
+    { value: "24H",     label: "24H Shift",     bg: "bg-green-100",  text: "text-green-800",  ring: "bg-green-100 text-green-800 ring-green-300",  dot: "bg-green-400"  },
   ]
 }
 
@@ -50,9 +52,9 @@ export default function PreferredCalendar({
   month,
   preferred,
   onChange,
-  prefersTwelveHour = false,
+  shiftLengthPref = "PREFER_24H",
 }: Props) {
-  const typeOpts = getTypeOpts(prefersTwelveHour)
+  const typeOpts = getTypeOpts(shiftLengthPref)
   const [activeType, setActiveType] = useState<string | null>(typeOpts[0].value)
 
   const daysInMonth = getDaysInMonth(new Date(year, month - 1))

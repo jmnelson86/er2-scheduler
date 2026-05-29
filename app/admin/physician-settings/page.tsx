@@ -15,8 +15,8 @@ interface PhysicianRow {
   name:              string
   username:          string
   email:             string | null
-  isPRN:             boolean
-  prefersTwelveHour: boolean
+  isPRN:            boolean
+  shiftLengthPref:  string
   adminTargetShifts: number | null
   adminHardCap:      boolean
   allowedShiftTypes: string
@@ -47,7 +47,7 @@ export default function PhysicianSettingsPage() {
   const [loading, setLoading]       = useState(true)
 
   // Local edit state per physician
-  const [edits, setEdits] = useState<Record<string, { adminTargetShifts: string; adminHardCap: boolean; prefersTwelveHour: boolean; allowedShiftTypes: string; email: string }>>({})
+  const [edits, setEdits] = useState<Record<string, { adminTargetShifts: string; adminHardCap: boolean; shiftLengthPref: string; allowedShiftTypes: string; email: string }>>({})
 
   // Recurring preferences expand state
   const [expandedRecurring, setExpandedRecurring] = useState<Record<string, boolean>>({})
@@ -74,7 +74,7 @@ export default function PhysicianSettingsPage() {
         initialEdits[d.id] = {
           adminTargetShifts: d.adminTargetShifts != null ? String(d.adminTargetShifts) : "",
           adminHardCap:      d.adminHardCap,
-          prefersTwelveHour: d.prefersTwelveHour,
+          shiftLengthPref:   d.shiftLengthPref ?? "PREFER_24H",
           allowedShiftTypes: d.allowedShiftTypes ?? "ALL",
           email:             d.email ?? "",
         }
@@ -126,7 +126,7 @@ export default function PhysicianSettingsPage() {
     setEdits((prev) => ({ ...prev, [userId]: { ...prev[userId], allowedShiftTypes: val } }))
   }
 
-  function setEdit(userId: string, field: "adminTargetShifts" | "adminHardCap" | "prefersTwelveHour" | "email", value: string | boolean) {
+  function setEdit(userId: string, field: "adminTargetShifts" | "adminHardCap" | "shiftLengthPref" | "email", value: string | boolean) {
     setEdits((prev) => ({ ...prev, [userId]: { ...prev[userId], [field]: value } }))
   }
 
@@ -140,8 +140,8 @@ export default function PhysicianSettingsPage() {
       body:    JSON.stringify({
         userId,
         adminTargetShifts,
-        adminHardCap:      edit.adminHardCap,
-        prefersTwelveHour: edit.prefersTwelveHour,
+        adminHardCap:     edit.adminHardCap,
+        shiftLengthPref:  edit.shiftLengthPref ?? "PREFER_24H",
         allowedShiftTypes: edit.allowedShiftTypes ?? "ALL",
         email:             edit.email.trim() || null,
       }),
@@ -254,7 +254,7 @@ export default function PhysicianSettingsPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {physicians.map((doc) => {
-                const edit = edits[doc.id] ?? { adminTargetShifts: "", adminHardCap: false, prefersTwelveHour: false, allowedShiftTypes: "ALL" }
+                const edit = edits[doc.id] ?? { adminTargetShifts: "", adminHardCap: false, shiftLengthPref: "PREFER_24H", allowedShiftTypes: "ALL" }
                 const activeShifts = edit.allowedShiftTypes === "ALL" ? [...ALL_SHIFT_TYPES] : edit.allowedShiftTypes.split(",").map((s) => s.trim())
                 const isSaving = saving[doc.id] ?? false
                 const isSaved  = saved[doc.id]  ?? false
@@ -298,21 +298,39 @@ export default function PhysicianSettingsPage() {
                         </span>
                       </label>
                     </td>
-                    {/* Shift length preference toggle */}
+                    {/* Shift length preference — 3-way selector */}
                     <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        onClick={() => setEdit(doc.id, "prefersTwelveHour", !edit.prefersTwelveHour)}
-                        className={`px-3 py-1 rounded-full text-xs font-semibold ring-1 transition ${
-                          edit.prefersTwelveHour
-                            ? "bg-amber-100 text-amber-700 ring-amber-300 hover:bg-amber-200"
-                            : "bg-blue-100 text-blue-700 ring-blue-300 hover:bg-blue-200"
-                        }`}
-                        title="Click to toggle shift length preference"
-                        aria-label={`Shift length preference for ${doc.name}`}
-                      >
-                        {edit.prefersTwelveHour ? "12h shifts" : "24h shifts"}
-                      </button>
+                      <div className="flex gap-1" role="group" aria-label={`Shift length preference for ${doc.name}`}>
+                        {(["PREFER_24H", "EITHER", "PREFER_12H"] as const).map((pref) => {
+                          const active = (edit.shiftLengthPref ?? "PREFER_24H") === pref
+                          const labels = { PREFER_24H: "24h", EITHER: "Either", PREFER_12H: "12h" }
+                          const activeStyle = {
+                            PREFER_24H: "bg-blue-600 text-white ring-blue-600",
+                            EITHER:     "bg-slate-600 text-white ring-slate-600",
+                            PREFER_12H: "bg-amber-500 text-white ring-amber-500",
+                          }
+                          const inactiveStyle = {
+                            PREFER_24H: "bg-white text-blue-700 ring-blue-200 hover:bg-blue-50",
+                            EITHER:     "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50",
+                            PREFER_12H: "bg-white text-amber-700 ring-amber-200 hover:bg-amber-50",
+                          }
+                          return (
+                            <button
+                              key={pref}
+                              type="button"
+                              onClick={() => setEdit(doc.id, "shiftLengthPref", pref)}
+                              className={`px-2 py-0.5 rounded text-xs font-semibold ring-1 transition ${active ? activeStyle[pref] : inactiveStyle[pref]}`}
+                              title={
+                                pref === "PREFER_24H" ? "Prefer 24-hour shifts (+30 scheduling bonus)"
+                                : pref === "EITHER"   ? "Works either shift length (no preference bonus)"
+                                :                       "Prefer 12-hour shifts (+60 scheduling bonus)"
+                              }
+                            >
+                              {labels[pref]}
+                            </button>
+                          )
+                        })}
+                      </div>
                     </td>
                     {/* Allowed shift types */}
                     <td className="px-4 py-3">

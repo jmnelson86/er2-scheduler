@@ -29,7 +29,7 @@ export const authOptions: NextAuthOptions = {
           email: "",
           role: user.role,
           isPRN: user.isPRN,
-          prefersTwelveHour: user.prefersTwelveHour,
+          shiftLengthPref: user.shiftLengthPref,
           username: user.username,
           color: user.color,
         }
@@ -40,10 +40,10 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.role              = (user as any).role
-        token.isPRN             = (user as any).isPRN
-        token.prefersTwelveHour = (user as any).prefersTwelveHour
-        token.username          = (user as any).username
+        token.role             = (user as any).role
+        token.isPRN            = (user as any).isPRN
+        token.shiftLengthPref  = (user as any).shiftLengthPref
+        token.username         = (user as any).username
         token.color             = (user as any).color
       }
       return token
@@ -52,9 +52,9 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         ;(session.user as any).id               = token.sub
         ;(session.user as any).role             = token.role
-        ;(session.user as any).isPRN            = token.isPRN
-        ;(session.user as any).prefersTwelveHour = token.prefersTwelveHour
-        ;(session.user as any).username         = token.username
+        ;(session.user as any).isPRN           = token.isPRN
+        ;(session.user as any).shiftLengthPref = token.shiftLengthPref
+        ;(session.user as any).username        = token.username
         ;(session.user as any).color            = token.color
       }
       return session

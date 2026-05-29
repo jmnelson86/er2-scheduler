@@ -19,8 +19,8 @@ export async function GET() {
       name:              true,
       username:          true,
       email:             true,
-      isPRN:             true,
-      prefersTwelveHour: true,
+      isPRN:            true,
+      shiftLengthPref:  true,
       adminTargetShifts: true,
       adminHardCap:      true,
       allowedShiftTypes: true,
@@ -31,7 +31,7 @@ export async function GET() {
 }
 
 // PATCH /api/admin/physician-settings
-// Body: { userId, adminTargetShifts?, adminHardCap?, prefersTwelveHour? }
+// Body: { userId, adminTargetShifts?, adminHardCap?, shiftLengthPref? }
 // Updates one or more admin-managed fields on a physician's User record.
 export async function PATCH(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -39,7 +39,7 @@ export async function PATCH(req: NextRequest) {
     return Response.json({ error: "Unauthorized" }, { status: 401 })
 
   const body = await req.json()
-  const { userId, adminTargetShifts, adminHardCap, prefersTwelveHour, allowedShiftTypes, newPassword, email } = body
+  const { userId, adminTargetShifts, adminHardCap, shiftLengthPref, allowedShiftTypes, newPassword, email } = body
 
   if (!userId) return Response.json({ error: "userId required" }, { status: 400 })
 
@@ -54,8 +54,11 @@ export async function PATCH(req: NextRequest) {
     data.adminHardCap = Boolean(adminHardCap)
   }
 
-  if (prefersTwelveHour !== undefined) {
-    data.prefersTwelveHour = Boolean(prefersTwelveHour)
+  if (shiftLengthPref !== undefined) {
+    const valid = ["PREFER_24H", "EITHER", "PREFER_12H"]
+    if (!valid.includes(String(shiftLengthPref)))
+      return Response.json({ error: "Invalid shiftLengthPref" }, { status: 400 })
+    data.shiftLengthPref = String(shiftLengthPref)
   }
 
   if (allowedShiftTypes !== undefined) {
@@ -83,8 +86,8 @@ export async function PATCH(req: NextRequest) {
       id:                true,
       name:              true,
       username:          true,
-      isPRN:             true,
-      prefersTwelveHour: true,
+      isPRN:            true,
+      shiftLengthPref:  true,
       adminTargetShifts: true,
       adminHardCap:      true,
       allowedShiftTypes: true,

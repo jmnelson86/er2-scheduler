@@ -194,11 +194,15 @@ export default async function AdminPage() {
                     <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">PRN</span>
                   )}
                   <span className={`px-2 py-0.5 rounded-full ${
-                    doc.prefersTwelveHour
+                    doc.shiftLengthPref === "PREFER_12H"
                       ? "bg-amber-100 text-amber-700"
+                      : doc.shiftLengthPref === "EITHER"
+                      ? "bg-slate-100 text-slate-600"
                       : "bg-blue-100 text-blue-700"
                   }`}>
-                    {doc.prefersTwelveHour ? "12h pref" : "24h pref"}
+                    {doc.shiftLengthPref === "PREFER_12H" ? "12h pref"
+                      : doc.shiftLengthPref === "EITHER"  ? "either"
+                      : "24h pref"}
                   </span>
                 </div>
               </div>

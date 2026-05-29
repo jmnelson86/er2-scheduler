@@ -36,7 +36,7 @@ export interface PhysicianData {
   id:               string
   name:             string
   isPRN:            boolean
-  prefersTwelveHour: boolean
+  shiftLengthPref:  "PREFER_24H" | "EITHER" | "PREFER_12H"
   hardBlockedDates: string[]  // REQUIRED — never assign
   softBlockedDates: string[]  // PREFERRED — also hard block; never assign
   preferredDates:   string[]  // "YYYY-MM-DD" — if any set, physician only works these days
@@ -96,9 +96,9 @@ function dayIndex(dateStr: string) {
  * needs to satisfy each physician group's shift targets, then assign those day
  * types to the calendar days where the relevant physicians are most available.
  *
- * - Physicians who prefer 24H  (prefersTwelveHour=false) consume one 24H slot/day.
- * - Physicians who prefer 12H  (prefersTwelveHour=true)  consume one DAY12 or
- *   NIGHT12 slot/day; each split day provides both.
+ * - PREFER_24H / EITHER physicians consume one 24H slot/day.
+ * - PREFER_12H physicians consume one DAY12 or NIGHT12 slot/day;
+ *   each split day provides both.
  *
  * Slots are still created for every day — no day is left uncovered.
  */
@@ -131,12 +131,17 @@ export function buildSlots(
     return p.allowedShiftTypes.split(",").map((s) => s.trim()).includes(type)
   }
 
-  // Split physicians into groups by effective shift-type capability & preference
+  // Split physicians into groups by effective shift-type capability & preference.
+  // PREFER_24H and EITHER count toward the 24H group for planning purposes.
+  // PREFER_12H counts toward the 12H group.
+  // EITHER physicians appear only in the 24H group to avoid double-counting their
+  // targets; the scoring stage (runScheduler) routes them to whichever slot type
+  // has the most demand at the time of assignment.
   const physicians24h = physicians.filter(
-    (p) => !p.prefersTwelveHour && canWorkType(p, "24H")
+    (p) => p.shiftLengthPref !== "PREFER_12H" && canWorkType(p, "24H")
   )
   const physicians12h = physicians.filter(
-    (p) => p.prefersTwelveHour && (canWorkType(p, "DAY12") || canWorkType(p, "NIGHT12"))
+    (p) => p.shiftLengthPref === "PREFER_12H" && (canWorkType(p, "DAY12") || canWorkType(p, "NIGHT12"))
   )
 
   // Total target shifts for each group (use admin override if set)
@@ -303,9 +308,12 @@ export function runScheduler(
         ? p.adminTargetShifts
         : p.maxShifts
 
-      // Prefer-12h match
-      if (slot.shiftType !== "24H" && p.prefersTwelveHour)  score += 60
-      if (slot.shiftType === "24H" && !p.prefersTwelveHour) score += 30
+      // Shift-length preference match
+      // PREFER_12H: strongly incentivize 12H slots (+60)
+      // PREFER_24H: moderately incentivize 24H slots (+30)
+      // EITHER:     no preference bonus (scores equally on both types)
+      if (slot.shiftType !== "24H" && p.shiftLengthPref === "PREFER_12H") score += 60
+      if (slot.shiftType === "24H" && p.shiftLengthPref === "PREFER_24H") score += 30
 
       // Shift-count scoring
       // Under effective target — incentivize

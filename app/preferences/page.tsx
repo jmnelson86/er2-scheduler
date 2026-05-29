@@ -358,7 +358,9 @@ function PreferencesInner() {
                   <div className="rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-800">
                     Your current preference is set to{" "}
                     <strong>
-                      {(session.user as any).prefersTwelveHour ? "12-hour shifts" : "24-hour shifts"}
+                      {(session.user as any).shiftLengthPref === "PREFER_12H" ? "12-hour shifts"
+                        : (session.user as any).shiftLengthPref === "EITHER"  ? "either length"
+                        : "24-hour shifts"}
                     </strong>
                     . Contact your administrator to change this.
                   </div>
@@ -518,7 +520,7 @@ function PreferencesInner() {
                     month={selectedPeriod.month}
                     preferred={preferred}
                     onChange={handlePreferredChange}
-                    prefersTwelveHour={(session.user as any).prefersTwelveHour}
+                    shiftLengthPref={(session.user as any).shiftLengthPref ?? "PREFER_24H"}
                   />
                 </div>
 

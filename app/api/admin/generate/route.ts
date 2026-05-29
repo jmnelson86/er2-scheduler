@@ -58,10 +58,10 @@ export async function POST(req: NextRequest) {
     const pref   = p.preferences[0]
     const target = pref?.targetShifts ?? (p.isPRN ? 8 : 15)
     return {
-      id:               p.id,
-      name:             p.name,
-      isPRN:            p.isPRN,
-      prefersTwelveHour: p.prefersTwelveHour,
+      id:              p.id,
+      name:            p.name,
+      isPRN:           p.isPRN,
+      shiftLengthPref: (p.shiftLengthPref ?? "PREFER_24H") as "PREFER_24H" | "EITHER" | "PREFER_12H",
       hardBlockedDates: hardBlocked[p.id] ?? [],
       softBlockedDates: softBlocked[p.id] ?? [],
       preferredDates:   p.preferredDates.map((d) => d.date),
@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
   // Fetch all assignments to return
   const allAssignments = await prisma.shiftAssignment.findMany({
     where:   { periodId },
-    include: { user: { select: { id: true, name: true, isPRN: true, prefersTwelveHour: true } } },
+    include: { user: { select: { id: true, name: true, isPRN: true, shiftLengthPref: true } } },
     orderBy: { date: "asc" },
   })
 

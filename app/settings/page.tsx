@@ -17,7 +17,7 @@ interface Settings {
   username: string
   email: string | null
   color: string
-  prefersTwelveHour: boolean
+  shiftLengthPref: string
 }
 
 export default function SettingsPage() {
@@ -214,7 +214,9 @@ export default function SettingsPage() {
           <div className="text-sm">
             <p className="text-xs text-slate-500 mb-0.5">Preferred shift length</p>
             <p className="font-medium text-slate-800">
-              {settings.prefersTwelveHour ? "12-hour shifts" : "24-hour shifts"}
+              {settings.shiftLengthPref === "PREFER_12H" ? "12-hour shifts"
+                : settings.shiftLengthPref === "EITHER"  ? "Either length"
+                : "24-hour shifts"}
             </p>
           </div>
           <p className="text-xs text-slate-400">Contact an admin to change your shift preference.</p>

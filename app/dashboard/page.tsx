@@ -23,7 +23,7 @@ export default async function DashboardPage() {
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { name: true, isPRN: true, prefersTwelveHour: true },
+    select: { name: true, isPRN: true, shiftLengthPref: true },
   })
 
   // Open periods
@@ -64,7 +64,9 @@ export default async function DashboardPage() {
           </h1>
           <p className="text-slate-500 mt-1 text-sm">
             Shift preference: <span className="font-medium text-slate-700">
-              {user?.prefersTwelveHour ? "12-hour shifts" : "24-hour shifts"}
+              {user?.shiftLengthPref === "PREFER_12H" ? "12-hour shifts"
+                : user?.shiftLengthPref === "EITHER"  ? "either length"
+                : "24-hour shifts"}
             </span>
             {user?.isPRN && <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">PRN</span>}
           </p>

@@ -14,7 +14,7 @@ model User {
   role              String   @default("PHYSICIAN")   // "ADMIN" | "PHYSICIAN"
   email             String?
   isPRN             Boolean  @default(false)
-  prefersTwelveHour Boolean  @default(false)
+  shiftLengthPref   String   @default("PREFER_24H")  // "PREFER_24H" | "EITHER" | "PREFER_12H"
   isActive          Boolean  @default(true)
   adminTargetShifts Int?     // admin-set shift target (overrides physician's if set)
   adminHardCap      Boolean  @default(false)  // if true, scheduler never exceeds adminTargetShifts

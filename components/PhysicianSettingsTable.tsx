@@ -3,12 +3,14 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 
+type ShiftLengthPref = "PREFER_24H" | "EITHER" | "PREFER_12H"
+
 type Physician = {
   id: string
   name: string
   username: string
   isPRN: boolean
-  prefersTwelveHour: boolean
+  shiftLengthPref: ShiftLengthPref
   adminTargetShifts: number | null
   adminHardCap: boolean
 }
@@ -71,9 +73,8 @@ export default function PhysicianSettingsTable({ initialPhysicians }: Props) {
     patch(physician.id, "adminHardCap", { adminHardCap: next })
   }
 
-  function handleShiftPrefToggle(physician: Physician) {
-    const next = !physician.prefersTwelveHour
-    patch(physician.id, "prefersTwelveHour", { prefersTwelveHour: next })
+  function handleShiftPrefChange(physician: Physician, pref: ShiftLengthPref) {
+    patch(physician.id, "shiftLengthPref", { shiftLengthPref: pref })
   }
 
   return (
@@ -156,21 +157,44 @@ export default function PhysicianSettingsTable({ initialPhysicians }: Props) {
                   </span>
                 </td>
 
-                {/* Shift length preference toggle */}
+                {/* Shift length preference — 3-way selector */}
                 <td className="py-3 pr-4">
-                  <button
-                    onClick={() => handleShiftPrefToggle(doc)}
-                    disabled={isSaving}
-                    className={`px-3 py-1 rounded-full text-xs font-semibold ring-1 transition disabled:opacity-50 ${
-                      doc.prefersTwelveHour
-                        ? "bg-amber-100 text-amber-700 ring-amber-300 hover:bg-amber-200"
-                        : "bg-blue-100 text-blue-700 ring-blue-300 hover:bg-blue-200"
-                    }`}
-                    aria-label={`Shift length preference for ${doc.name}`}
-                    title="Click to toggle shift length preference"
-                  >
-                    {doc.prefersTwelveHour ? "12h shifts" : "24h shifts"}
-                  </button>
+                  <div className="flex gap-1" role="group" aria-label={`Shift length preference for ${doc.name}`}>
+                    {(["PREFER_24H", "EITHER", "PREFER_12H"] as ShiftLengthPref[]).map((pref) => {
+                      const active = doc.shiftLengthPref === pref
+                      const labels: Record<ShiftLengthPref, string> = {
+                        PREFER_24H: "24h",
+                        EITHER:     "Either",
+                        PREFER_12H: "12h",
+                      }
+                      const styles: Record<ShiftLengthPref, string> = {
+                        PREFER_24H: active
+                          ? "bg-blue-600 text-white ring-blue-600"
+                          : "bg-white text-blue-700 ring-blue-200 hover:bg-blue-50",
+                        EITHER: active
+                          ? "bg-slate-600 text-white ring-slate-600"
+                          : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50",
+                        PREFER_12H: active
+                          ? "bg-amber-500 text-white ring-amber-500"
+                          : "bg-white text-amber-700 ring-amber-200 hover:bg-amber-50",
+                      }
+                      return (
+                        <button
+                          key={pref}
+                          onClick={() => handleShiftPrefChange(doc, pref)}
+                          disabled={isSaving || active}
+                          className={`px-2 py-0.5 rounded text-xs font-semibold ring-1 transition disabled:cursor-default ${styles[pref]}`}
+                          title={
+                            pref === "PREFER_24H" ? "Prefer 24-hour shifts (+30 score bonus)"
+                            : pref === "EITHER"   ? "Works either length (no preference bonus)"
+                            :                       "Prefer 12-hour shifts (+60 score bonus)"
+                          }
+                        >
+                          {labels[pref]}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </td>
 
                 {/* Save indicator */}
