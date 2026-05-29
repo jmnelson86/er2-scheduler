@@ -11,6 +11,14 @@
  *
  * Rest rule: ≥ 12h (720 min) between end of one shift and start of the next.
  *
+ * Weekly soft limits (rolling 7-day window, penalty-based not hard block):
+ *   - Prefer ≤ 3 × 24H shifts per week
+ *   - Prefer ≤ 4 × 12H shifts per week
+ *
+ * Weekend fairness: weekend slots are distributed evenly across physicians.
+ *   Exception: if a physician explicitly listed a weekend date as a preferred/
+ *   available date, the balance penalty does not apply to them for that date.
+ *
  * Shift start/end in absolute minutes from midnight of day 0 (= day 1 of month):
  *   Day D (0-indexed): midnight = D * 1440
  *   24H  : start = D*1440 + 540,  end = D*1440 + 1980  (= (D+1)*1440 + 540)
@@ -50,6 +58,19 @@ export interface Assignment {
 }
 
 const MIN_REST = 720  // 12 hours
+
+// Weekly soft limits (rolling 7-day window)
+const MAX_24H_PER_WEEK  = 3   // prefer ≤ 3 × 24H shifts in any 7-day window
+const MAX_12H_PER_WEEK  = 4   // prefer ≤ 4 × 12H shifts in any 7-day window
+
+// Weekend balance penalty weight (per extra weekend shift above the current minimum)
+const WEEKEND_BALANCE_WEIGHT = 25
+
+// Returns true if a date string falls on Saturday or Sunday
+function isWeekend(dateStr: string): boolean {
+  const dow = new Date(dateStr + "T12:00:00").getDay()
+  return dow === 0 || dow === 6
+}
 
 // Returns absolute start/end minutes (from midnight day 0) for a slot
 function slotMinutes(d: number, type: "24H" | "DAY12" | "NIGHT12") {
@@ -193,7 +214,25 @@ export function runScheduler(
   const shiftCount: Record<string, number> = {}
   physicians.forEach((p) => { shiftCount[p.id] = 0 })
 
+  // Track weekend shift count per physician (for fair distribution)
+  const weekendCount: Record<string, number> = {}
+  physicians.forEach((p) => { weekendCount[p.id] = 0 })
+
   const results: Assignment[] = []
+
+  // Count a physician's 24H and 12H shifts in a rolling window [windowStart, windowEnd] (day indices)
+  function shiftsInWindow(physId: string, windowStart: number, windowEnd: number) {
+    let count24h = 0, count12h = 0
+    for (const a of results) {
+      if (a.userId !== physId) continue
+      const d = dayIndex(a.date)
+      if (d >= windowStart && d <= windowEnd) {
+        if (a.shiftType === "24H") count24h++
+        else count12h++
+      }
+    }
+    return { count24h, count12h }
+  }
 
   for (const slot of slots) {
     const d = dayIndex(slot.date)
@@ -275,6 +314,26 @@ export function runScheduler(
       const gap = start - lastEnd[p.id]
       if (gap >= 1440) score += 20  // been off a full day
 
+      // ── Weekly workload limit (rolling 7-day window) ──────────────────────
+      // Prefer ≤ 3 × 24H or ≤ 4 × 12H shifts in any 7-day window.
+      // This is a soft penalty — coverage is still guaranteed if no other candidate.
+      const windowStart = Math.max(0, d - 6)
+      const { count24h: w24h, count12h: w12h } = shiftsInWindow(p.id, windowStart, d - 1)
+      if (slot.shiftType === "24H"  && w24h >= MAX_24H_PER_WEEK)  score -= 50
+      if (slot.shiftType !== "24H"  && w12h >= MAX_12H_PER_WEEK)  score -= 50
+
+      // ── Weekend fairness ─────────────────────────────────────────────────
+      // Distribute weekend shifts evenly unless this physician explicitly
+      // requested this date (it appears in their preferredDates list).
+      if (isWeekend(slot.date) && !p.preferredDates.includes(slot.date)) {
+        const minWeekend = Math.min(...candidates.map((c) => weekendCount[c.id]))
+        const maxWeekend = Math.max(...candidates.map((c) => weekendCount[c.id]))
+        if (maxWeekend > minWeekend) {
+          // Bonus for having fewer weekends, penalty for having more
+          score += (maxWeekend - weekendCount[p.id]) * WEEKEND_BALANCE_WEIGHT
+        }
+      }
+
       // Tiebreaker
       score += Math.random() * 5
 
@@ -286,6 +345,7 @@ export function runScheduler(
 
     lastEnd[winner.id] = end
     shiftCount[winner.id]++
+    if (isWeekend(slot.date)) weekendCount[winner.id]++
 
     results.push({
       date:        slot.date,
