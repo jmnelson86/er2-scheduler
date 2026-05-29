@@ -21,10 +21,11 @@ export default function NavBar() {
     }`
 
   const adminLinks = [
-    { href: "/admin",              label: "Overview"     },
-    { href: "/admin/physicians",   label: "Physicians"   },
-    { href: "/admin/schedule",     label: "Schedule"     },
-    { href: "/admin/shift-offers", label: "Shift Offers" },
+    { href: "/admin",               label: "Overview"     },
+    { href: "/admin/physicians",    label: "Physicians"   },
+    { href: "/admin/schedule",      label: "Schedule"     },
+    { href: "/admin/shift-offers",  label: "Shift Offers" },
+    { href: "/admin/settings",      label: "Settings"     },
   ]
 
   const physicianLinks = [
