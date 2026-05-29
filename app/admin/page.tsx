@@ -59,6 +59,9 @@ export default async function AdminPage() {
 
         {/* Quick links */}
         <div className="flex flex-wrap gap-3">
+          <Link href="/admin/users" className="btn-secondary text-sm">
+            👤 Manage Users
+          </Link>
           <Link href="/admin/physician-settings" className="btn-secondary text-sm">
             ⚙️ Physician Shift Settings
           </Link>

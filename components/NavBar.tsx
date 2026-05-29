@@ -23,6 +23,7 @@ export default function NavBar() {
   const adminLinks = [
     { href: "/admin",               label: "Overview"     },
     { href: "/admin/physicians",    label: "Physicians"   },
+    { href: "/admin/users",         label: "Users"        },
     { href: "/admin/schedule",      label: "Schedule"     },
     { href: "/admin/shift-offers",  label: "Shift Offers" },
     { href: "/admin/settings",      label: "Settings"     },
