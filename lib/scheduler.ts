@@ -15,6 +15,10 @@
  *   - Prefer ≤ 3 × 24H shifts per week
  *   - Prefer ≤ 4 × 12H shifts per week
  *
+ * Consecutive 12H shift preference:
+ *   - Prefer scheduling 12H shifts in pairs (2 consecutive calendar days)
+ *   - No more than 3 consecutive 12H shifts (strong penalty beyond that)
+ *
  * Weekend fairness: weekend slots are distributed evenly across physicians.
  *   Exception: if a physician explicitly listed a weekend date as a preferred/
  *   available date, the balance penalty does not apply to them for that date.
@@ -218,6 +222,13 @@ export function runScheduler(
   const weekendCount: Record<string, number> = {}
   physicians.forEach((p) => { weekendCount[p.id] = 0 })
 
+  // Track consecutive 12H shift streaks per physician
+  // consecutive12h: how many back-to-back calendar days they've had a 12H shift
+  // last12hDayIdx:  day index (0-based) of their most recent 12H shift
+  const consecutive12h: Record<string, number> = {}
+  const last12hDayIdx:  Record<string, number>  = {}
+  physicians.forEach((p) => { consecutive12h[p.id] = 0; last12hDayIdx[p.id] = -99 })
+
   const results: Assignment[] = []
 
   // Count a physician's 24H and 12H shifts in a rolling window [windowStart, windowEnd] (day indices)
@@ -322,6 +333,18 @@ export function runScheduler(
       if (slot.shiftType === "24H"  && w24h >= MAX_24H_PER_WEEK)  score -= 50
       if (slot.shiftType !== "24H"  && w12h >= MAX_12H_PER_WEEK)  score -= 50
 
+      // ── Consecutive 12H shift preference ─────────────────────────────────
+      // Prefer scheduling 12H shifts in pairs (2 in a row); hard limit at 3.
+      //   streak = 0 → no bonus (starting fresh)
+      //   streak = 1 → +35 bonus (completing a preferred pair)
+      //   streak = 2 → no bonus (3rd is acceptable, but don't push for it)
+      //   streak ≥ 3 → −80 penalty (over the limit; only assigned if truly unavoidable)
+      if (slot.shiftType !== "24H") {
+        const streak = consecutive12h[p.id]
+        if      (streak === 1) score += 35
+        else if (streak >= 3)  score -= 80
+      }
+
       // ── Weekend fairness ─────────────────────────────────────────────────
       // Distribute weekend shifts evenly unless this physician explicitly
       // requested this date (it appears in their preferredDates list).
@@ -346,6 +369,20 @@ export function runScheduler(
     lastEnd[winner.id] = end
     shiftCount[winner.id]++
     if (isWeekend(slot.date)) weekendCount[winner.id]++
+
+    // Update consecutive 12H streak
+    if (slot.shiftType !== "24H") {
+      // Streak continues if last 12H was exactly yesterday
+      if (last12hDayIdx[winner.id] === d - 1) {
+        consecutive12h[winner.id]++
+      } else {
+        consecutive12h[winner.id] = 1
+      }
+      last12hDayIdx[winner.id] = d
+    } else {
+      // 24H shift breaks any 12H streak
+      consecutive12h[winner.id] = 0
+    }
 
     results.push({
       date:        slot.date,
