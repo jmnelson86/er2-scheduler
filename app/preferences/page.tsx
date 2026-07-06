@@ -50,6 +50,7 @@ function PreferencesInner() {
   const [loadingPref, setLoadingPref]   = useState(false)
   const debounceRef      = useRef<ReturnType<typeof setTimeout> | null>(null)
   const prefDebounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const draftSaveRef     = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [recurringPrefs, setRecurringPrefs]       = useState<{ dow: number; blockType: string }[]>([])
   const [recurringLoading, setRecurringLoading]   = useState(false)
@@ -247,6 +248,26 @@ function PreferencesInner() {
       setSaving(false)
     }
   }
+
+  // Auto-save shift goal, min/max, and notes (debounced 1.5s)
+  useEffect(() => {
+    if (!selectedId || loadingPref) return
+    if (draftSaveRef.current) clearTimeout(draftSaveRef.current)
+    draftSaveRef.current = setTimeout(() => {
+      fetch("/api/preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          periodId: selectedId,
+          targetShifts,
+          minShifts,
+          maxShifts,
+          notes,
+        }),
+      })
+    }, 1500)
+    return () => { if (draftSaveRef.current) clearTimeout(draftSaveRef.current) }
+  }, [targetShifts, minShifts, maxShifts, notes, selectedId, loadingPref])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
