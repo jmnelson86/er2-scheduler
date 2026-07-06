@@ -230,18 +230,18 @@ export default function ScheduleGrid({
           className={`
             w-full text-left rounded flex items-center gap-0.5 pl-0 pr-1 transition select-none overflow-hidden
             ${fullWidth ? "py-2 text-sm" : "text-xs py-0.5"}
-            ${a.isConflict ? "bg-red-100 text-red-800 ring-1 ring-red-300" : "bg-slate-100 text-slate-800"}
+            ${a.isConflict ? "bg-red-200 text-red-900 ring-1 ring-red-400" : "bg-slate-200 text-slate-900"}
             ${isOpen ? "ring-2 ring-blue-500 shadow" : "hover:brightness-95"}
           `}
         >
           <span className="self-stretch rounded-l shrink-0" style={{ backgroundColor: physColor, minWidth: fullWidth ? "6px" : "4px", width: fullWidth ? "6px" : "4px" }} />
-          <span className="ml-0.5 font-mono text-slate-500 shrink-0" style={{ fontSize: "9px" }}>
+          <span className="ml-0.5 font-mono font-bold text-slate-700 shrink-0" style={{ fontSize: "11px" }}>
             {SHIFT_SHORT[a.shiftType] ?? a.shiftType}
           </span>
           {fullWidth && (
-            <span className="ml-1 text-xs text-slate-400 shrink-0">{SHIFT_LABEL[a.shiftType] ?? a.shiftType}</span>
+            <span className="ml-1 text-xs text-slate-600 shrink-0">{SHIFT_LABEL[a.shiftType] ?? a.shiftType}</span>
           )}
-          <span className={`ml-0.5 truncate font-medium flex items-center gap-0.5 ${fullWidth ? "text-sm ml-auto pr-1" : "text-[10px]"}`}>
+          <span className={`ml-0.5 truncate font-semibold flex items-center gap-0.5 ${fullWidth ? "text-sm ml-auto pr-1" : "text-xs"}`}>
             {isSaving && <span className="animate-spin" style={{ fontSize: "9px" }}>⟳</span>}
             {a.isLocked && <span style={{ fontSize: "9px" }}>🔒</span>}
             {doc ? (fullWidth ? doc.name.replace(/^Dr\.\s*/i, "") : lastName(doc.name)) : (
@@ -316,13 +316,13 @@ export default function ScheduleGrid({
       {!isMobile && (
         <div className="grid grid-cols-7 border-l border-t border-slate-200">
           {DOW_HEADERS.map((h) => (
-            <div key={h} className="border-r border-b border-slate-200 px-1.5 py-1 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide bg-slate-50">
+            <div key={h} className="border-r border-b border-slate-200 px-1.5 py-2 text-center text-sm font-bold text-slate-700 uppercase tracking-wide bg-slate-50">
               {h}
             </div>
           ))}
           {cells.map((cell, idx) => {
             if (cell.type === "empty") {
-              return <div key={`empty-${idx}`} className="border-r border-b border-slate-200 bg-slate-50 min-h-[80px]" />
+              return <div key={`empty-${idx}`} className="border-r border-b border-slate-200 bg-slate-50 min-h-[100px]" />
             }
             const { dateStr, dayNum, isWeekend } = cell
             const dayAssigns = byDate[dateStr] ?? []
@@ -330,11 +330,11 @@ export default function ScheduleGrid({
             return (
               <div
                 key={dateStr}
-                className={`border-r border-b border-slate-200 min-h-[80px] p-1 flex flex-col gap-0.5 ${
+                className={`border-r border-b border-slate-200 min-h-[100px] p-1 flex flex-col gap-0.5 ${
                   isToday ? "bg-blue-50" : isWeekend ? "bg-slate-50" : "bg-white"
                 }`}
               >
-                <span className={`text-xs font-bold mb-0.5 ${isToday ? "text-blue-700" : isWeekend ? "text-slate-400" : "text-slate-700"}`}>
+                <span className={`text-sm font-bold mb-0.5 ${isToday ? "text-blue-700" : isWeekend ? "text-slate-500" : "text-slate-800"}`}>
                   {isToday ? (
                     <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold">
                       {dayNum}

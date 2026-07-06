@@ -50,9 +50,9 @@ const SHIFT_SHORT: Record<string, string> = {
 
 // Tailwind classes for each shift type
 const SHIFT_CHIP: Record<string, string> = {
-  "24H":    "bg-blue-100 text-blue-800 ring-blue-200",
-  "DAY12":  "bg-amber-100 text-amber-800 ring-amber-200",
-  "NIGHT12":"bg-indigo-100 text-indigo-800 ring-indigo-200",
+  "24H":    "bg-blue-200 text-blue-950 ring-blue-300",
+  "DAY12":  "bg-amber-200 text-amber-950 ring-amber-300",
+  "NIGHT12":"bg-indigo-200 text-indigo-950 ring-indigo-300",
 }
 
 const SHIFT_DOT: Record<string, string> = {
@@ -323,7 +323,7 @@ function MonthCalendar({ period, assignments, isPast, onOffer, successIds }: Cal
       </div>
 
       {/* Day-of-week headers */}
-      <div className="grid grid-cols-7 text-center text-xs font-medium text-slate-400 border-b border-slate-100 pb-1">
+      <div className="grid grid-cols-7 text-center text-xs font-bold text-slate-600 border-b border-slate-200 pb-1">
         {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d) => (
           <div key={d}>{d}</div>
         ))}
@@ -357,17 +357,17 @@ function MonthCalendar({ period, assignments, isPast, onOffer, successIds }: Cal
             <div
               key={dateStr}
               className={`
-                min-h-[72px] rounded-lg p-1.5 flex flex-col gap-1 transition
+                min-h-[84px] rounded-lg p-1.5 flex flex-col gap-1 transition
                 ${isToday       ? "ring-2 ring-[#0d2580] bg-blue-50"  : ""}
                 ${isWeekend && !isToday ? "bg-slate-50/70" : ""}
                 ${!isWeekend && !isToday ? "bg-white" : ""}
               `}
             >
               {/* Day number */}
-              <span className={`text-xs font-semibold leading-none ${
+              <span className={`text-sm font-bold leading-none ${
                 isToday    ? "text-[#0d2580]"  :
-                isWeekend  ? "text-slate-400"  :
-                             "text-slate-500"
+                isWeekend  ? "text-slate-500"  :
+                             "text-slate-700"
               }`}>
                 {day}
               </span>
@@ -377,7 +377,7 @@ function MonthCalendar({ period, assignments, isPast, onOffer, successIds }: Cal
                 <div className="flex flex-col gap-1 flex-1">
                   <span
                     className={`
-                      px-1.5 py-0.5 rounded text-[10px] font-semibold ring-1 leading-tight
+                      px-1.5 py-0.5 rounded text-xs font-bold ring-1 leading-tight
                       ${SHIFT_CHIP[assignment.shiftType] ?? "bg-slate-100 text-slate-700 ring-slate-200"}
                       ${assignment.isConflict ? "ring-amber-400 ring-2" : ""}
                     `}
