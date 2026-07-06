@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Dispatch, SetStateAction } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import NavBar from "@/components/NavBar"
@@ -40,6 +40,202 @@ const PREF_STYLE: Record<string, string> = {
   PREFER_12H: "bg-amber-100 text-amber-700",
 }
 
+type UserRowProps = {
+  user:          User
+  editing:       Record<string, boolean>
+  edits:         Record<string, EditState>
+  saving:        Record<string, string>
+  errors:        Record<string, string>
+  pwOpen:        Record<string, boolean>
+  pwValue:       Record<string, string>
+  pwMsg:         Record<string, string>
+  setEdits:      Dispatch<SetStateAction<Record<string, EditState>>>
+  startEdit:     (user: User) => void
+  saveEdit:      (userId: string) => void
+  cancelEdit:    (userId: string) => void
+  toggleActive:  (user: User) => void
+  setPwOpen:     Dispatch<SetStateAction<Record<string, boolean>>>
+  setPwValue:    Dispatch<SetStateAction<Record<string, string>>>
+  resetPassword: (userId: string) => void
+}
+
+function UserRow({
+  user, editing, edits, saving, errors, pwOpen, pwValue, pwMsg,
+  setEdits, startEdit, saveEdit, cancelEdit, toggleActive, setPwOpen, setPwValue, resetPassword,
+}: UserRowProps) {
+  const isEditing = editing[user.id] ?? false
+  const edit      = edits[user.id]
+  const saveMsg   = saving[user.id] ?? ""
+  const errMsg    = errors[user.id] ?? ""
+  const hasPwOpen = pwOpen[user.id] ?? false
+
+  return (
+    <tr className={`transition-colors ${user.isActive ? "hover:bg-slate-50" : "opacity-50 bg-slate-50"}`}>
+
+      {/* Name / username / email */}
+      <td className="px-4 py-3">
+        {isEditing ? (
+          <div className="space-y-1.5">
+            <input
+              value={edit.name}
+              onChange={(e) => setEdits((ev) => ({ ...ev, [user.id]: { ...ev[user.id], name: e.target.value } }))}
+              className="input text-xs py-1 w-full"
+              placeholder="Full name"
+            />
+            <input
+              value={edit.username}
+              onChange={(e) => setEdits((ev) => ({ ...ev, [user.id]: { ...ev[user.id], username: e.target.value } }))}
+              className="input text-xs py-1 w-full"
+              placeholder="username"
+            />
+            <input
+              type="email"
+              value={edit.email}
+              onChange={(e) => setEdits((ev) => ({ ...ev, [user.id]: { ...ev[user.id], email: e.target.value } }))}
+              className="input text-xs py-1 w-full"
+              placeholder="Email (optional)"
+            />
+          </div>
+        ) : (
+          <div>
+            <p className="font-medium text-slate-800">{user.name}</p>
+            <p className="text-xs text-slate-400">@{user.username}</p>
+            {user.email && <p className="text-xs text-slate-400">{user.email}</p>}
+          </div>
+        )}
+      </td>
+
+      {/* Role / PRN */}
+      <td className="px-4 py-3">
+        {isEditing ? (
+          <div className="space-y-1.5">
+            <select
+              value={edit.role}
+              onChange={(e) => setEdits((ev) => ({ ...ev, [user.id]: { ...ev[user.id], role: e.target.value as any } }))}
+              className="input text-xs py-1"
+            >
+              <option value="PHYSICIAN">Physician</option>
+              <option value="ADMIN">Admin</option>
+            </select>
+            <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={edit.isPRN}
+                onChange={(e) => setEdits((ev) => ({ ...ev, [user.id]: { ...ev[user.id], isPRN: e.target.checked } }))}
+                className="rounded accent-blue-600"
+              />
+              PRN
+            </label>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-1">
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+              user.role === "ADMIN" ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-600"
+            }`}>
+              {user.role === "ADMIN" ? "Admin" : "Physician"}
+            </span>
+            {user.isPRN && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">PRN</span>
+            )}
+            {user.role === "PHYSICIAN" && (
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${PREF_STYLE[user.shiftLengthPref] ?? "bg-slate-100 text-slate-600"}`}>
+                {PREF_LABEL[user.shiftLengthPref] ?? user.shiftLengthPref}
+              </span>
+            )}
+          </div>
+        )}
+      </td>
+
+      {/* Status */}
+      <td className="px-4 py-3">
+        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+          user.isActive ? "bg-green-100 text-green-700" : "bg-slate-200 text-slate-500"
+        }`}>
+          {user.isActive ? "Active" : "Inactive"}
+        </span>
+      </td>
+
+      {/* Actions */}
+      <td className="px-4 py-3">
+        <div className="flex flex-wrap gap-2 items-center">
+          {isEditing ? (
+            <>
+              <button
+                onClick={() => saveEdit(user.id)}
+                className="btn-primary text-xs py-1 px-3"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => cancelEdit(user.id)}
+                className="btn-secondary text-xs py-1 px-3"
+              >
+                Cancel
+              </button>
+              {errMsg && <span className="text-xs text-red-600">{errMsg}</span>}
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => startEdit(user)}
+                className="btn-secondary text-xs py-1 px-3"
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => toggleActive(user)}
+                className={`text-xs py-1 px-3 rounded-lg ring-1 font-medium transition ${
+                  user.isActive
+                    ? "bg-white text-red-600 ring-red-200 hover:bg-red-50"
+                    : "bg-white text-green-600 ring-green-200 hover:bg-green-50"
+                }`}
+              >
+                {user.isActive ? "Deactivate" : "Reactivate"}
+              </button>
+              <button
+                onClick={() => setPwOpen((o) => ({ ...o, [user.id]: !hasPwOpen }))}
+                className="btn-secondary text-xs py-1 px-3"
+              >
+                {hasPwOpen ? "Cancel" : "Reset PW"}
+              </button>
+            </>
+          )}
+          {saveMsg && !isEditing && (
+            <span className={`text-xs ${saveMsg.includes("Saved") ? "text-green-600" : "text-slate-400"}`}>
+              {saveMsg}
+            </span>
+          )}
+        </div>
+
+        {/* Inline password reset */}
+        {hasPwOpen && !isEditing && (
+          <div className="mt-2 flex gap-2 items-center">
+            <input
+              type="password"
+              value={pwValue[user.id] ?? ""}
+              onChange={(e) => setPwValue((v) => ({ ...v, [user.id]: e.target.value }))}
+              onKeyDown={(e) => e.key === "Enter" && resetPassword(user.id)}
+              className="input text-xs py-1 w-40"
+              placeholder="New password (min 6)"
+            />
+            <button
+              onClick={() => resetPassword(user.id)}
+              className="btn-primary text-xs py-1 px-3"
+            >
+              Set
+            </button>
+            {pwMsg[user.id] && (
+              <span className={`text-xs ${pwMsg[user.id]?.includes("reset") ? "text-green-600" : "text-red-600"}`}>
+                {pwMsg[user.id]}
+              </span>
+            )}
+          </div>
+        )}
+      </td>
+    </tr>
+  )
+}
+
 export default function UserManagementPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
@@ -51,7 +247,7 @@ export default function UserManagementPage() {
   // Inline edit state per user
   const [editing, setEditing]       = useState<Record<string, boolean>>({})
   const [edits, setEdits]           = useState<Record<string, EditState>>({})
-  const [saving, setSaving]         = useState<Record<string, string>>({})   // userId → message
+  const [saving, setSaving]         = useState<Record<string, string>>({})
   const [errors, setErrors]         = useState<Record<string, string>>({})
 
   // Password reset
@@ -206,183 +402,12 @@ export default function UserManagementPage() {
 
   if (status === "loading" || !session || loading) return null
 
-  const visible = users.filter((u) => showInactive ? true : u.isActive)
+  const visible    = users.filter((u) => showInactive ? true : u.isActive)
   const physicians = visible.filter((u) => u.role === "PHYSICIAN")
   const admins     = visible.filter((u) => u.role === "ADMIN")
 
-  function UserRow({ user }: { user: User }) {
-    const isEditing = editing[user.id] ?? false
-    const edit      = edits[user.id]
-    const saveMsg   = saving[user.id] ?? ""
-    const errMsg    = errors[user.id] ?? ""
-    const hasPwOpen = pwOpen[user.id] ?? false
-
-    return (
-      <tr className={`transition-colors ${user.isActive ? "hover:bg-slate-50" : "opacity-50 bg-slate-50"}`}>
-
-        {/* Name / username / email */}
-        <td className="px-4 py-3">
-          {isEditing ? (
-            <div className="space-y-1.5">
-              <input
-                value={edit.name}
-                onChange={(e) => setEdits((ev) => ({ ...ev, [user.id]: { ...ev[user.id], name: e.target.value } }))}
-                className="input text-xs py-1 w-full"
-                placeholder="Full name"
-              />
-              <input
-                value={edit.username}
-                onChange={(e) => setEdits((ev) => ({ ...ev, [user.id]: { ...ev[user.id], username: e.target.value } }))}
-                className="input text-xs py-1 w-full"
-                placeholder="username"
-              />
-              <input
-                type="email"
-                value={edit.email}
-                onChange={(e) => setEdits((ev) => ({ ...ev, [user.id]: { ...ev[user.id], email: e.target.value } }))}
-                className="input text-xs py-1 w-full"
-                placeholder="Email (optional)"
-              />
-            </div>
-          ) : (
-            <div>
-              <p className="font-medium text-slate-800">{user.name}</p>
-              <p className="text-xs text-slate-400">@{user.username}</p>
-              {user.email && <p className="text-xs text-slate-400">{user.email}</p>}
-            </div>
-          )}
-        </td>
-
-        {/* Role / PRN */}
-        <td className="px-4 py-3">
-          {isEditing ? (
-            <div className="space-y-1.5">
-              <select
-                value={edit.role}
-                onChange={(e) => setEdits((ev) => ({ ...ev, [user.id]: { ...ev[user.id], role: e.target.value as any } }))}
-                className="input text-xs py-1"
-              >
-                <option value="PHYSICIAN">Physician</option>
-                <option value="ADMIN">Admin</option>
-              </select>
-              <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={edit.isPRN}
-                  onChange={(e) => setEdits((ev) => ({ ...ev, [user.id]: { ...ev[user.id], isPRN: e.target.checked } }))}
-                  className="rounded accent-blue-600"
-                />
-                PRN
-              </label>
-            </div>
-          ) : (
-            <div className="flex flex-wrap gap-1">
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                user.role === "ADMIN" ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-600"
-              }`}>
-                {user.role === "ADMIN" ? "Admin" : "Physician"}
-              </span>
-              {user.isPRN && (
-                <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">PRN</span>
-              )}
-              {user.role === "PHYSICIAN" && (
-                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${PREF_STYLE[user.shiftLengthPref] ?? "bg-slate-100 text-slate-600"}`}>
-                  {PREF_LABEL[user.shiftLengthPref] ?? user.shiftLengthPref}
-                </span>
-              )}
-            </div>
-          )}
-        </td>
-
-        {/* Status */}
-        <td className="px-4 py-3">
-          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-            user.isActive ? "bg-green-100 text-green-700" : "bg-slate-200 text-slate-500"
-          }`}>
-            {user.isActive ? "Active" : "Inactive"}
-          </span>
-        </td>
-
-        {/* Actions */}
-        <td className="px-4 py-3">
-          <div className="flex flex-wrap gap-2 items-center">
-            {isEditing ? (
-              <>
-                <button
-                  onClick={() => saveEdit(user.id)}
-                  className="btn-primary text-xs py-1 px-3"
-                >
-                  Save
-                </button>
-                <button
-                  onClick={() => cancelEdit(user.id)}
-                  className="btn-secondary text-xs py-1 px-3"
-                >
-                  Cancel
-                </button>
-                {errMsg && <span className="text-xs text-red-600">{errMsg}</span>}
-              </>
-            ) : (
-              <>
-                <button
-                  onClick={() => startEdit(user)}
-                  className="btn-secondary text-xs py-1 px-3"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => toggleActive(user)}
-                  className={`text-xs py-1 px-3 rounded-lg ring-1 font-medium transition ${
-                    user.isActive
-                      ? "bg-white text-red-600 ring-red-200 hover:bg-red-50"
-                      : "bg-white text-green-600 ring-green-200 hover:bg-green-50"
-                  }`}
-                >
-                  {user.isActive ? "Deactivate" : "Reactivate"}
-                </button>
-                <button
-                  onClick={() => setPwOpen((o) => ({ ...o, [user.id]: !hasPwOpen }))}
-                  className="btn-secondary text-xs py-1 px-3"
-                >
-                  {hasPwOpen ? "Cancel" : "Reset PW"}
-                </button>
-              </>
-            )}
-            {saveMsg && !isEditing && (
-              <span className={`text-xs ${saveMsg.includes("Saved") ? "text-green-600" : "text-slate-400"}`}>
-                {saveMsg}
-              </span>
-            )}
-          </div>
-
-          {/* Inline password reset */}
-          {hasPwOpen && !isEditing && (
-            <div className="mt-2 flex gap-2 items-center">
-              <input
-                type="password"
-                value={pwValue[user.id] ?? ""}
-                onChange={(e) => setPwValue((v) => ({ ...v, [user.id]: e.target.value }))}
-                onKeyDown={(e) => e.key === "Enter" && resetPassword(user.id)}
-                className="input text-xs py-1 w-40"
-                placeholder="New password (min 6)"
-              />
-              <button
-                onClick={() => resetPassword(user.id)}
-                className="btn-primary text-xs py-1 px-3"
-              >
-                Set
-              </button>
-              {pwMsg[user.id] && (
-                <span className={`text-xs ${pwMsg[user.id]?.includes("reset") ? "text-green-600" : "text-red-600"}`}>
-                  {pwMsg[user.id]}
-                </span>
-              )}
-            </div>
-          )}
-        </td>
-      </tr>
-    )
-  }
+  const rowProps = { editing, edits, saving, errors, pwOpen, pwValue, pwMsg,
+    setEdits, startEdit, saveEdit, cancelEdit, toggleActive, setPwOpen, setPwValue, resetPassword }
 
   return (
     <div className="min-h-screen" style={{ background: "#f4f6fb" }}>
@@ -536,7 +561,7 @@ export default function UserManagementPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {physicians.map((u) => <UserRow key={u.id} user={u} />)}
+                {physicians.map((u) => <UserRow key={u.id} user={u} {...rowProps} />)}
               </tbody>
             </table>
           </div>
@@ -558,7 +583,7 @@ export default function UserManagementPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {admins.map((u) => <UserRow key={u.id} user={u} />)}
+                {admins.map((u) => <UserRow key={u.id} user={u} {...rowProps} />)}
               </tbody>
             </table>
           </div>
