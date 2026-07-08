@@ -23,14 +23,15 @@ interface Assignment {
 }
 
 interface Props {
-  year:         number
-  month:        number
-  assignments:  Assignment[]
-  physicians:   Physician[]
-  onReassign:   (assignmentId: string, userId: string | null) => Promise<void>
-  onToggleLock: (assignmentId: string) => Promise<void>
-  onSplit?:     (assignmentId: string) => Promise<void>
-  onAddSlot?:   (date: string, shiftType: "DAY12" | "NIGHT12") => Promise<void>
+  year:                number
+  month:               number
+  assignments:         Assignment[]
+  physicians:          Physician[]
+  onReassign:          (assignmentId: string, userId: string | null) => Promise<void>
+  onToggleLock:        (assignmentId: string) => Promise<void>
+  onSplit?:            (assignmentId: string) => Promise<void>
+  onAddSlot?:          (date: string, shiftType: "DAY12" | "NIGHT12") => Promise<void>
+  onResolveConflict?:  (assignmentId: string) => Promise<void>
 }
 
 const SHIFT_SHORT: Record<string, string> = {
@@ -57,7 +58,7 @@ function lastName(name: string) {
 }
 
 export default function ScheduleGrid({
-  year, month, assignments, physicians, onReassign, onToggleLock, onSplit, onAddSlot,
+  year, month, assignments, physicians, onReassign, onToggleLock, onSplit, onAddSlot, onResolveConflict,
 }: Props) {
   const [openCell,   setOpenCell]   = useState<string | null>(null)
   const [saving,     setSaving]     = useState<string | null>(null)
@@ -178,6 +179,16 @@ export default function ScheduleGrid({
         >
           {a.isLocked ? "🔓 Unlock assignment" : "🔒 Lock assignment"}
         </button>
+        {a.isConflict && onResolveConflict && (
+          <button
+            type="button"
+            onClick={async () => { setSaving(a.id); await onResolveConflict(a.id); setSaving(null); setOpenCell(null) }}
+            className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 border-b border-slate-100 hover:bg-red-50 transition text-red-700"
+          >
+            <span>✓ Resolve conflict — keep assigned</span>
+            <span className="ml-auto text-slate-400 text-[10px]">Clears flag</span>
+          </button>
+        )}
         <button
           type="button"
           onClick={() => handleReassign(a.id, null)}
@@ -230,7 +241,7 @@ export default function ScheduleGrid({
           className={`
             w-full text-left rounded flex items-center gap-0.5 pl-0 pr-1 transition select-none overflow-hidden
             ${fullWidth ? "py-2 text-sm" : "text-xs py-0.5"}
-            ${a.isConflict ? "bg-red-200 text-red-900 ring-1 ring-red-400" : "bg-slate-200 text-slate-900"}
+            ${a.isConflict ? "bg-red-100 text-red-900 ring-2 ring-red-600" : "bg-slate-200 text-slate-900"}
             ${isOpen ? "ring-2 ring-blue-500 shadow" : "hover:brightness-95"}
           `}
         >
@@ -245,7 +256,7 @@ export default function ScheduleGrid({
             {isSaving && <span className="animate-spin" style={{ fontSize: "9px" }}>⟳</span>}
             {a.isLocked && <span style={{ fontSize: "9px" }}>🔒</span>}
             {doc ? (fullWidth ? doc.name.replace(/^Dr\.\s*/i, "") : lastName(doc.name)) : (
-              <span className="text-red-600 font-semibold">⚠ Open</span>
+              <span className="text-red-900 font-semibold">⚠ Open</span>
             )}
           </span>
         </button>

@@ -67,7 +67,16 @@ export async function PATCH(req: NextRequest) {
 
   // Reassign: { assignmentId, userId? }
   if (body.assignmentId !== undefined) {
-    const { assignmentId, userId, lock } = body
+    const { assignmentId, userId, lock, resolveConflict } = body
+
+    if (resolveConflict) {
+      const updated = await prisma.shiftAssignment.update({
+        where: { id: assignmentId },
+        data:  { isConflict: false, conflictNote: null },
+        include: { user: { select: { id: true, name: true, isPRN: true, shiftLengthPref: true, color: true } } },
+      })
+      return Response.json({ assignment: { ...updated, conflictNote: "" } })
+    }
 
     if (lock !== undefined) {
       const updated = await prisma.shiftAssignment.update({

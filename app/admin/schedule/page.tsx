@@ -174,6 +174,20 @@ function ScheduleInner() {
     }
   }
 
+  async function handleResolveConflict(assignmentId: string) {
+    const res = await fetch("/api/admin/schedule", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assignmentId, resolveConflict: true }),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      setAssignments((prev) =>
+        prev.map((a) => a.id === assignmentId ? { ...a, ...data.assignment } : a)
+      )
+    }
+  }
+
   async function handleSplit(assignmentId: string) {
     const res = await fetch("/api/admin/schedule", {
       method: "PUT",
@@ -339,6 +353,7 @@ function ScheduleInner() {
                   onToggleLock={handleToggleLock}
                   onSplit={period.status !== "PUBLISHED" ? handleSplit : undefined}
                   onAddSlot={period.status !== "PUBLISHED" ? handleAddSlot : undefined}
+                  onResolveConflict={period.status !== "PUBLISHED" ? handleResolveConflict : undefined}
                 />
               </div>
             ) : (
